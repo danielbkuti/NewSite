@@ -79,14 +79,16 @@ Components:
 ---
 
 # API Endpoints
+```
 - GET /api/tasks/
 - POST /api/tasks/
 - GET /api/tasks/{id}/
 - PUT /api/tasks/{id}/
 - DELETE /api/tasks/{id}/
+
 - GET /api/subtasks/
 - POST /api/subtasks/
-
+```
 
  ### Filtering Example
 
