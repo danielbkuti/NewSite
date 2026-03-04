@@ -1,0 +1,30 @@
+{%extends 'base.html'%}
+
+{% block content %}
+<h1>Tasks</h1>
+    <ul>
+        {% for instance in task_list %}
+            <li>
+                <a href="{% url 'tasks:task-detail' instance.id %}">{{ instance.name }}</a> - Created:
+                <span class="utc" data-utc="{{ instance.dateCreated.isoformat }}">{{ instance.dateCreated }}</span>
+            </li>
+        {% endfor %}
+    </ul>
+
+    <script>
+        function convertToLocal() {
+            const elements = document.querySelectorAll(".utc");
+            elements.forEach(el => {
+                const utc = el.getAttribute("data-utc");
+                const local = new Date(utc);
+                el.textContent = local.toLocaleString();
+            });
+        }
+        convertToLocal();
+    </script>
+
+{%endblock%}
+{#{% for instance in task_list %}<p>#}
+{#        {{ forloop.counter }} - <a href="/tasks/{{ instance.id }}/">{{ instance.name }}</a>#}
+{#    </p>#}
+{#{% endfor %}#}

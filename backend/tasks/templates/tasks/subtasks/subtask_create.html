@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2>Adding Subtasks to: "{{ task.name }}"</h2>
+
+{% if subtasks %}
+    <h3>Existing Subtasks:</h3>
+    <ul>
+        {% for sub in subtasks %}
+            <li>
+                {{ sub.name }} — Due: {{ sub.dateDeadline|date:"Y-m-d H:i" }}
+                {% if sub.completed %}✅{% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No subtasks yet.</p>
+{% endif %}
+
+<hr>
+
+<h3>Add a New Subtask</h3>
+
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+
+    <button type="submit" name="action" value="save">Save Subtask</button>
+    <button type="submit" name="action" value="add_another">Save and Add Another</button>
+</form>
+
+<a href="{% url 'tasks:task-detail' task.id %}">Back to Task</a>
+
+{% endblock %}

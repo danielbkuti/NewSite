@@ -1,0 +1,11 @@
+{% autoescape off %}
+Hi {{ user.username }},
+
+Thank you for signing up for our Task Manager! 
+
+Please click on the link below to confirm your registration and activate your account:
+
+http://localhost:8637{% url 'activate' uidb64=uid token=token %}
+
+If you did not create an account, please ignore this email.
+{% endautoescape %}

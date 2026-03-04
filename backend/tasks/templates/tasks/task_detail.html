@@ -1,0 +1,56 @@
+{%extends 'base.html'%}
+{% load tz %}
+
+{% block content %}
+    <h1>{{ task.name }}</h1>
+    {% if task.description %}
+        <p>{{ task.description }}</p>
+    {% elif task.subtasks.exists %}
+        <h4>Subtasks:</h4>
+        <ul>
+            {% for sub in task.subtasks.all %}
+                <li>
+                    {{ sub.name }} —
+                    {% if sub.dateDeadline %}
+                    Due: {{ sub.dateDeadline|date:"Y-m-d H:i" }}
+                    {% endif %}
+                    {% if sub.completed %}✅
+                    {% else %}
+                          <form method="POST" style="display: inline">
+                                {% csrf_token %}
+                                  <input type="hidden" name="complete_subtask_id" value="{{ sub.id }}">
+                                <button type="submit" name="action" value="subtask_mark_completed">Mark Task as Completed</button>
+                            </form>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No description or subtasks available.</p>
+    {% endif %}
+    <p>Date Created: <span class="utc" data-utc="{{ task.dateCreated.isoformat }}">{{ task.dateCreated }}</span></p>
+    <p>Deadline: <span class="utc" data-utc="{{ task.dateDeadline.isoformat }}">{{ task.dateDeadline }}</span></p>
+
+        <!-- Edit Task Button -->
+    <a href="{% url 'tasks:task-edit' task.id %}">
+        <button>Edit Task</button>
+    </a>
+
+    <a href="{% url 'tasks:task-delete' task.id %}">
+        <button>Delete Task</button>
+    </a>
+
+    <form method="POST" action=".">
+        {% csrf_token %}
+        <button type="submit" name="action" value="mark_completed">Mark Task as Completed</button>
+    </form>
+
+
+    <script>
+        document.querySelectorAll(".utc").forEach(el => {
+            const date = new Date(el.dataset.utc);
+            el.textContent = date.toLocaleString();
+        });
+    </script>
+
+{%endblock%}

@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Completed Tasks</h1>
+
+{% if completed_tasks %}
+    <ul>
+        {% for task in completed_tasks %}
+            <li>
+                <strong>{{ task.name }}</strong> — {{ task.dateDeadline|date:"Y-m-d H:i" }} ✅
+                <br>
+                {% if task.description %}
+                    <em>{{ task.description }}</em>
+                {% endif %}
+                <br>
+                <a href="{% url 'tasks:completed_details' task.id %}">View Details</a>
+            </li>
+            <hr>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No completed tasks yet.</p>
+{% endif %}
+
+{% endblock %}

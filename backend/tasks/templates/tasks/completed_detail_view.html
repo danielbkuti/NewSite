@@ -1,0 +1,31 @@
+{%extends 'base.html' %}
+{% load tz %}
+
+{% block content %}
+    <h1>{{ task.name }}</h1>
+    {% if task.description %}
+        <p>{{ task.description }}</p>
+    {% elif task.subtasks.exists %}
+        <h4>Subtasks:</h4>
+        <ul>
+            {% for sub in task.subtasks.all %}
+                <li>
+                    {{ sub.name }} — Due: {{ sub.dateDeadline|date:"Y-m-d H:i" }}
+                    {% if sub.completed %}✅{% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No description or subtasks available.</p>
+    {% endif %}
+    <p>Date Created: <span class="utc" data-utc="{{ task.dateCreated.isoformat }}">{{ task.dateCreated }}</span></p>
+    <p>Deadline: <span class="utc" data-utc="{{ task.dateDeadline.isoformat }}">{{ task.dateDeadline }}</span></p>
+
+    <script>
+        document.querySelectorAll(".utc").forEach(el => {
+            const date = new Date(el.dataset.utc);
+            el.textContent = date.toLocaleString();
+        });
+    </script>
+
+{%endblock%}
