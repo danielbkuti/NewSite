@@ -202,6 +202,12 @@ Docker ensures a consistent development environment and simplifies dependency ma
 
 ---
 
+## API Preview
+
+![API Root](docs/api-root.png)
+
+---
+
 # Future Improvements
 
 - React frontend
