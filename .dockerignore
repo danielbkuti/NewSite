@@ -1,8 +1,10 @@
-__pycache__/
+.git
+.gitignore
+.env
+__pycache__
 *.pyc
 *.pyo
 *.pyd
-db.sqlite3
-.env
-../.idea/
-venv/
+.idea
+node_modules
+coverage

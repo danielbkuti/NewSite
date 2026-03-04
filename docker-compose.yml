@@ -1,26 +1,61 @@
 services:
+
   db:
     image: postgres:16
-    restart: always
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
+    container_name: flexmaster_db
+    restart: unless-stopped
+
     env_file:
       - .env
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+
     ports:
       - "5432:5432"
 
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - flexmaster_network
+
+
   web:
     build: .
-    restart:  always
-    command: python manage.py runserver 0.0.0.0:8000
+    container_name: flexmaster_web
+    restart: unless-stopped
+
+    command: python backend/manage.py runserver 0.0.0.0:8000
+
     volumes:
       - .:/app
+
     ports:
       - "8637:8000"
+
     env_file:
       - .env
+
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+
+    networks:
+      - flexmaster_network
+
 
 volumes:
   postgres_data:
+
+
+networks:
+  flexmaster_network:

@@ -2,7 +2,7 @@ from django.views.decorators.http import require_http_methods
 from django.shortcuts import redirect, render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 import pytz
-from .models import Task, SubTask
+from ..models import Task, SubTask
 from .forms import TaskForm, SubTaskForm
 
 @login_required

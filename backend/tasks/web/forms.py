@@ -2,8 +2,7 @@ import pytz
 from django import forms
 from django.forms import DateTimeInput
 from django.utils.timezone import now, make_naive
-from .models import Task, SubTask
-
+from ..models import Task, SubTask
 
 class TaskForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):

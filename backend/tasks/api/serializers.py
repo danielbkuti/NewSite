@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Task, SubTask
+from ..models import Task, SubTask
 from django.utils import timezone
 
 

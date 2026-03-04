@@ -1,5 +1,5 @@
 from rest_framework import viewsets, permissions
-from .models import Task, SubTask
+from ..models import Task, SubTask
 from .serializers import TaskSerializer, SubTaskSerializer
 from rest_framework.filters import OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend

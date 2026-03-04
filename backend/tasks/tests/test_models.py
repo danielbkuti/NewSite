@@ -1,6 +1,6 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
-from tasks.models import Task, SubTask
+from .tasks.models import Task, SubTask
 from django.db import IntegrityError, transaction
 
 

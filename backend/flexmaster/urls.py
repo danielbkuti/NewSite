@@ -32,7 +32,7 @@ urlpatterns = [
     ),
     path('user/', include('user.urls')),
     # API_Views
-    path('api/', include('tasks.api_urls'))
+    path('api/', include('tasks.api.urls'))
 
     #ALL_AUTH
     # path('accounts/signup/', lambda request: redirect('custom_signup')),
