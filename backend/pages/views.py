@@ -3,8 +3,8 @@ from django.http import HttpResponse
 
 
 # Create your views here.
-def home_view(request, *args, **kwargs):
-    return render(request, "home.html", {})
+def frontend_view(request, *args, **kwargs):
+    return render(request, "frontend/index.html", {})
 
 
 def contact_view(request, *args, **kwargs):

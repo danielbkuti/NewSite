@@ -1,0 +1,123 @@
+// static/js/app.js
+
+async function fetchTasks() {
+    const list = document.getElementById("task-list");
+
+    // ✅ UX: show loading
+    list.innerHTML = "<p class='loading'>Loading...</p>";
+
+    try {
+        const response = await fetch("/api/tasks/");
+        const data = await response.json();
+
+        list.innerHTML = "";
+
+        data.results.forEach(task => {
+            const card = document.createElement("div");
+            card.className = "task-card";
+
+            const name = document.createElement("span");
+            name.className = "task-name";
+            name.textContent = task.name;
+
+            if (task.completed) {
+                name.classList.add("completed");
+            }
+
+            name.onclick = () => toggleComplete(task.id, task.completed);
+
+            const deleteBtn = document.createElement("button");
+            deleteBtn.textContent = "X";
+            deleteBtn.className = "delete-btn";
+            deleteBtn.onclick = () => deleteTask(task.id);
+
+            card.appendChild(name);
+            card.appendChild(deleteBtn);
+
+            list.appendChild(card);
+        });
+
+    } catch (error) {
+        // ✅ UX: error state
+        list.innerHTML = "Failed to load tasks.";
+        console.error(error);
+    }
+}
+
+async function createTask() {
+    const input = document.getElementById("task-input");
+
+    // ✅ UX: prevent empty tasks
+    if (!input.value.trim()) {
+        alert("Task cannot be empty");
+        return;
+    }
+
+    try {
+        await fetch("/api/tasks/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCSRFToken(),
+            },
+            body: JSON.stringify({
+                name: input.value,
+                status: "pending",
+                completed: false
+            })
+        });
+
+        input.value = "";
+        fetchTasks();
+
+    } catch (error) {
+        alert("Failed to create task");
+        console.error(error);
+    }
+}
+
+async function deleteTask(taskId) {
+    try {
+        await fetch(`/api/tasks/${taskId}/`, {
+            method: "DELETE",
+            headers: {
+                "X-CSRFToken": getCSRFToken(),
+            }
+        });
+
+        fetchTasks();
+
+    } catch (error) {
+        alert("Failed to delete task");
+        console.error(error);
+    }
+}
+
+function getCSRFToken() {
+    const cookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('csrftoken'));
+
+    return cookie ? cookie.split('=')[1] : '';
+}
+
+async function toggleComplete(taskId, completed) {
+    try {
+        await fetch(`/api/tasks/${taskId}/`, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCSRFToken(),
+            },
+            body: JSON.stringify({
+                completed: !completed
+            })
+        });
+
+        fetchTasks();
+
+    } catch (error) {
+        alert("Failed to update task");
+        console.error(error);
+    }
+}
