@@ -121,3 +121,69 @@ async function toggleComplete(taskId, completed) {
         console.error(error);
     }
 }
+
+async function checkAuth() {
+  try {
+    const response = await fetch("/user/api/auth/", {
+      credentials: "include" // VERY IMPORTANT
+    });
+
+    const data = await response.json();
+    return data;
+
+  } catch (error) {
+    console.error("Auth check failed", error);
+    return { authenticated: false };
+  }
+}
+
+
+// Landing Page
+function renderLanding(app) {
+  app.innerHTML = `
+    <div style="padding:20px">
+      <h1>Welcome to Task Manager</h1>
+      <p>Please log in</p>
+      <a href="/login/">Login</a>
+    </div>
+  `;
+
+
+  document.getElementById("goTasks").onclick = renderTasks;
+  document.getElementById("toggleTest").onclick = renderBlank;
+}
+
+// Task Page
+function renderTasks(app, username) {
+  app.innerHTML = `
+    <div style="padding:20px">
+      <h1>Welcome ${username}</h1>
+      <h2>Your Tasks</h2>
+      <ul>
+        <li>Task 1</li>
+        <li>Task 2</li>
+      </ul>
+      <a href="/logout/">Logout</a>
+    </div>
+  `;
+
+  document.getElementById("goHome").onclick = renderLanding;
+}
+function renderBlank(){
+    app.innerHTML =  '';
+
+    document.getElementById("toggleTest").onclick = renderLanding;
+}
+
+// Initial load
+document.addEventListener("DOMContentLoaded", async () => {
+    const app = document.getElementById("app");
+    app.innerHTML = "";
+    const auth = await checkAuth();
+
+  if (auth.authenticated) {
+    renderTasks(app, auth.username);
+  } else {
+    renderLanding(app);
+  }
+});
