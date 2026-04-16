@@ -129,7 +129,9 @@ async function checkAuth() {
     });
 
     const data = await response.json();
+    console.log(data);
     return data;
+    
 
   } catch (error) {
     console.error("Auth check failed", error);
@@ -154,21 +156,22 @@ function renderLanding(app) {
 }
 
 // Task Page
-function renderTasks(app, username) {
+function renderTasks() {
   app.innerHTML = `
     <div style="padding:20px">
-      <h1>Welcome ${username}</h1>
-      <h2>Your Tasks</h2>
-      <ul>
-        <li>Task 1</li>
-        <li>Task 2</li>
-      </ul>
-      <a href="/logout/">Logout</a>
+      <h1>Your Tasks</h1>
+      <div id="task-list">Loading...</div>
+      <button id="goHome">Back</button>
     </div>
   `;
 
   document.getElementById("goHome").onclick = renderLanding;
+  document.getElementById("toggleTest").onclick = renderBlank;
+
+  // THEN fetch data
+  fetchTasks();
 }
+
 function renderBlank(){
     app.innerHTML =  '';
 
@@ -176,14 +179,14 @@ function renderBlank(){
 }
 
 // Initial load
-document.addEventListener("DOMContentLoaded", async () => {
-    const app = document.getElementById("app");
-    app.innerHTML = "";
-    const auth = await checkAuth();
+// document.addEventListener("DOMContentLoaded", async () => {
+//     const app = document.getElementById("app");
+//     app.innerHTML = "";
+//     const auth = await checkAuth();
 
-  if (auth.authenticated) {
-    renderTasks(app, auth.username);
-  } else {
-    renderLanding(app);
-  }
-});
+//   if (auth.authenticated) {
+//     renderTasks(app, auth.username);
+//   } else {
+//     renderLanding(app);
+//   }
+// });
