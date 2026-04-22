@@ -177,6 +177,28 @@ function renderBlank(){
 
     document.getElementById("toggleTest").onclick = renderLanding;
 }
+function toggleTasksMenu() {
+  const menu = document.getElementById("dropdown-tasks");
+  const btn = event.currentTarget;
+
+  menu.classList.toggle("hidden");
+  btn.classList.toggle("text-transparent");
+  btn.classList.toggle("bg-clip-text");
+  btn.classList.toggle("bg-gradient-to-r");
+  btn.classList.toggle("from-blue-500");
+  btn.classList.toggle("to-purple-600");
+}
+function toggleGoalsMenu() {
+  const menu = document.getElementById("dropdown-goals");
+  const btn = event.currentTarget;
+
+  menu.classList.toggle("hidden");
+  btn.classList.toggle("text-transparent");
+  btn.classList.toggle("bg-clip-text");
+  btn.classList.toggle("bg-gradient-to-r");
+  btn.classList.toggle("from-blue-500");
+  btn.classList.toggle("to-purple-600");
+}
 
 // Initial load
 // document.addEventListener("DOMContentLoaded", async () => {

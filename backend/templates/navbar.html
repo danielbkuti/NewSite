@@ -1,80 +1,165 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body {
-  margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-.navbar {
-  overflow: hidden;
-  background-color: #3a1a36;
-  position: fixed;
-  bottom: 0;
-  width: 100%;
-}
-
-.navbar a {
-  float: left;
-  display: block;
-  color: #d9a80c;
-  text-align: center;
-  padding: 14px 16px;
-  text-decoration: none;
-  font-size: 17px;
-}
-
-.navbar a:hover {
-  background: #f1f1f1;
-  color: black;
-}
-
-.navbar a.active {
-  background-color: #333;
-  color: #d9a80c;
-}
-
-.main {
-  padding: 16px;
-  margin-bottom: 30px;
-}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://kit.fontawesome.com/d1343b3c1c.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
-<div style="padding: 10px; background-color: #f5f5f5; position: fixed; top: 0; width: 100%; z-index: 1000;">
-  <button onclick="history.back()" style="padding: 8px 16px; font-size: 16px; cursor: pointer;">← Back</button>
-</div>
+  <!-- Navbar -->
+  <nav id="navbar" class="fixed top-0 left-0 w-full z-50 transition-all duration-300 bg-transparent">
+    <div class="max-w-7xl mx-auto px-4">
+      <div class="flex justify-between h-16">
+        <!-- Logo -->
+        <div class="flex items-center">
+          <span class="text-xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">FlexMaster</span>
+        </div>
 
-<div class="main" style="margin-top: 60px;">
+        <!-- Desktop Menu -->
+        <div class="hidden md:flex items-center space-x-6">
+            <a href="#" class="text-gray-600 hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-600 hover:bg-clip-text hover:text-transparent transition duration-300">Home</a>
+            <div class="relative inline-block">
+                <!-- Trigger (looks like link) -->
+                <button onclick="toggleTasksMenu()"
+                        class="text-gray-600
+                 hover:bg-gradient-to-r
+                 hover:from-blue-500
+                 hover:to-purple-600
+                 hover:bg-clip-text
+                 hover:text-transparent
+                 transition duration-300">
+                    Tasks
+                </button>
+                <!-- Dropdown -->
+                <div id=down-tasks"
+                     class=""dropabsolute left-0 mt-2 w-40 bg-white shadow-lg rounded hidden z-50">
+                    <a href="/profile/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">Add New Task</a>
+                    <a href="/settings/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Upcoming Tasks</a>
+                    <a href="/logout/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Completed Tasks</a>
+                </div>
+            </div>
+            <div class="relative inline-block">
+                <!-- Trigger (looks like link) -->
+                <button onclick="toggleGoalsMenu()"
+                        class="text-gray-600
+                 hover:bg-gradient-to-r
+                 hover:from-blue-500
+                 hover:to-purple-600
+                 hover:bg-clip-text
+                 hover:text-transparent
+                 transition duration-300">
+                    Goals
+                </button>
+                <!-- Dropdown -->
+                <div id="dropdown-goals"
+                     class="absolute left-0 mt-2 w-40 bg-white shadow-lg rounded hidden z-50">
+                    <a href="/profile/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">Create a new Goal</a>
+                    <a href="/settings/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Goals</a>
+                    <a href="/logout/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Completed Goals</a>
+                </div>
+            </div>
+            <a href="#" class="text-gray-600 hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-600 hover:bg-clip-text hover:text-transparent transition duration-300">Calendar</a>
+        </div>
 
+          <div class="hidden md:flex items-center space-x-6">
+              <div class="relative group inline-block">
+
+                  <!-- Button -->
+                  <button onclick="goToSettings()"
+                          class="p-2 rounded hover:bg-gray-300 transition">
+                      <i class="fa-solid fa-plus
+                        text-gray-600
+                        group-hover:bg-gradient-to-r
+                        group-hover:from-blue-500
+                        group-hover:to-purple-600
+                        group-hover:bg-clip-text
+                        group-hover:text-transparent
+                        transition duration-200">
+                      </i>
+                  </button>
+
+                  <!-- Tooltip -->
+                  <span class="absolute top-full mb-2 left-1/2 -translate-x-1/2
+                     whitespace-nowrap
+                     bg-gray-800 text-white text-xs px-2 py-1 rounded
+                     opacity-0 group-hover:opacity-100
+                     transition duration-200 pointer-events-none">
+                Add new task
+                </span>
+
+              </div>
+              <div class="relative group inline-block">
+                  <button onclick="goToProfile()" class="group p-2 rounded hover:bg-gray-300 transition">
+                      <i class="fa-regular fa-circle-user
+                        text-gray-600
+                        group-hover:bg-gradient-to-r
+                        group-hover:from-blue-500
+                        group-hover:to-purple-600
+                        group-hover:bg-clip-text
+                        group-hover:text-transparent
+                        transition duration-200">
+                      </i>
+                  </button>
+                   <!-- Tooltip -->
+                  <span class="absolute top-full mb-2 left-1/2 -translate-x-1/2
+                     whitespace-nowrap
+                     bg-gray-800 text-white text-xs px-2 py-1 rounded
+                     opacity-0 group-hover:opacity-100
+                     transition duration-200 pointer-events-none">
+                Profile
+                </span>
+              </div>
+              <div class="relative group inline-block">
+                  <button onclick="logout()" class="group p-2 rounded hover:bg-gray-300 transition">
+                      <i class="fa-solid fa-right-from-bracket
+                        text-gray-600
+                        group-hover:bg-gradient-to-r
+                        group-hover:from-blue-500
+                        group-hover:to-purple-600
+                        group-hover:bg-clip-text
+                        group-hover:text-transparent
+                        transition duration-200"></i>
+                  </button>
+                   <!-- Tooltip -->
+                  <span class="absolute top-full mb-2 left-1/2 -translate-x-1/2
+                     whitespace-nowrap
+                     bg-gray-800 text-white text-xs px-2 py-1 rounded
+                     opacity-0 group-hover:opacity-100
+                     transition duration-200 pointer-events-none">
+                Log out
+                </span>
+              </div>
+        </div>
+
+        <!-- Mobile Menu Button -->
+        <div class="flex items-center md:hidden">
+          <button id="menu-btn" class="text-gray-600 focus:outline-none">
+            ☰
+          </button>
+        </div>
+      </div>
     </div>
 
+    <!-- Mobile Menu -->
+    <div id="mobile-menu" class="hidden md:hidden px-4 pb-4">
+      <a href="#" class="block py-2 text-gray-600">Home</a>
+      <a href="#" class="block py-2 text-gray-600">About</a>
+      <a href="#" class="block py-2 text-gray-600">Services</a>
+      <a href="#" class="block py-2 text-gray-600">Contact</a>
+    </div>
+  </nav>
 
-<div class="navbar">
-    <a href="/" class="active">Home</a>
-    <a href="/tasks">Task List</a>=
-    <a href="/tasks/completed/">Completed Tasks</a>
-    <a href="/tasks/create/">New Task</a>
-</div>
+  <!-- Page Content (to allow scrolling) -->
+  <!-- Spacer to prevent content being hidden under fixed navbar -->
+  <div class="h-16"></div>
+  <div class="p-6 space-y-6">
+    <div class="h-[2000px] bg-gradient-to-b from-gray-200 to-gray-400 rounded-2xl"></div>
+  </div>
 
-<script>
-  document.addEventListener("DOMContentLoaded", function () {
-    const links = document.querySelectorAll(".navbar a");
-
-    links.forEach(link => {
-      link.addEventListener("click", function () {
-        // Remove 'active' class from all links
-        links.forEach(l => l.classList.remove("active"));
-
-        // Add 'active' class to the clicked link
-        this.classList.add("active");
-      });
-    });
-  });
-</script>
+   <script src="/static/js/app.js">
+  </script>
 
 </body>
 </html>
