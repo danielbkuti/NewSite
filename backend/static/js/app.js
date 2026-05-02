@@ -1,5 +1,3 @@
-// static/js/app.js
-
 async function fetchTasks() {
     const list = document.getElementById("task-list");
 
@@ -139,7 +137,6 @@ async function checkAuth() {
   }
 }
 
-
 // Landing Page
 function renderLanding(app) {
   app.innerHTML = `
@@ -177,38 +174,125 @@ function renderBlank(){
 
     document.getElementById("toggleTest").onclick = renderLanding;
 }
-function toggleTasksMenu() {
-  const menu = document.getElementById("dropdown-tasks");
-  const btn = event.currentTarget;
 
-  menu.classList.toggle("hidden");
-  btn.classList.toggle("text-transparent");
-  btn.classList.toggle("bg-clip-text");
-  btn.classList.toggle("bg-gradient-to-r");
-  btn.classList.toggle("from-blue-500");
-  btn.classList.toggle("to-purple-600");
+
+
+let closeTimeout;
+
+function toggleTasksMenu(event) {
+  event.stopPropagation();
+
+    const menu = document.getElementById("dropdown-tasks");
+    const btn = document.getElementById("tasks-btn");
+
+    const isOpen = menu.classList.contains("opacity-100");
+
+    if (isOpen) {
+    closeMenu(menu,btn);
+    btn.classList.remove("active-gradient");
+    } else {
+        closeAllDropdowns();
+    openMenu(menu);
+    btn.classList.add("active-gradient");
+    }
 }
-function toggleGoalsMenu() {
-  const menu = document.getElementById("dropdown-goals");
-  const btn = event.currentTarget;
 
-  menu.classList.toggle("hidden");
-  btn.classList.toggle("text-transparent");
-  btn.classList.toggle("bg-clip-text");
-  btn.classList.toggle("bg-gradient-to-r");
-  btn.classList.toggle("from-blue-500");
-  btn.classList.toggle("to-purple-600");
+function toggleGoalsMenu(event) {
+    event.stopPropagation();
+
+    const menu = document.getElementById("dropdown-goals");
+    const btn = document.getElementById("goals-btn");
+
+    const isOpen = menu.classList.contains("opacity-100");
+
+    if (isOpen) {
+        closeMenu(menu, btn);
+        btn.classList.remove("active-gradient");
+    } else {
+        closeAllDropdowns();
+        openMenu(menu);
+        btn.classList.add("active-gradient");
+    }
 }
 
-// Initial load
-// document.addEventListener("DOMContentLoaded", async () => {
-//     const app = document.getElementById("app");
-//     app.innerHTML = "";
-//     const auth = await checkAuth();
+function setActive(btn) {
+  btn.classList.add(
+    "bg-gradient-to-r",
+    "from-blue-500",
+    "to-purple-600",
+    "bg-clip-text",
+    "text-transparent"
+  );
+}
 
-//   if (auth.authenticated) {
-//     renderTasks(app, auth.username);
-//   } else {
-//     renderLanding(app);
-//   }
-// });
+function removeActive(btn) {
+  btn.classList.remove(
+    "bg-gradient-to-r",
+    "from-blue-500",
+    "to-purple-600",
+    "bg-clip-text",
+    "text-transparent"
+  );
+}
+
+function openMenu(menu) {
+  clearTimeout(closeTimeout);
+
+  menu.classList.remove("opacity-0", "translate-y-2", "pointer-events-none");
+  menu.classList.add("opacity-100", "translate-y-0");
+}
+
+function closeMenu(menu, btn) {
+    if (!menu) return;
+
+    menu.classList.remove("opacity-100", "translate-y-0");
+    menu.classList.add("opacity-0", "translate-y-2", "pointer-events-none");
+
+    if (btn) btn.classList.remove("active-gradient");
+}
+
+function closeAllDropdowns() {
+  document.querySelectorAll(".dropdown-container").forEach(container => {
+    const menu = container.querySelector(".dropdown-menu");
+    const btn = container.querySelector("button");
+
+    if (menu && btn) {
+      closeMenu(menu, btn);
+    }
+  });
+}
+
+/* Apply to ALL dropdown containers */
+document.querySelectorAll(".dropdown-container").forEach(container => {
+
+  const menu = container.querySelector('[id^="dropdown"]');
+  const btn = container.querySelector("button");
+
+container.addEventListener("mouseleave", () => {
+  closeTimeout = setTimeout(() => {
+    closeMenu(menu, btn);
+  }, 800);
+});
+
+  container.addEventListener("mouseenter", () => {
+    clearTimeout(closeTimeout);
+  });
+
+});
+
+
+/* Click outside closes ALL dropdowns */
+document.addEventListener("click", (e) => {
+  document.querySelectorAll(".dropdown-container").forEach(container => {
+
+    if (!container.contains(e.target)) {
+      const menu = container.querySelector('[id^="dropdown"]');
+      const btn = container.querySelector("button");
+
+      closeMenu(menu);
+      removeActive(btn);
+    }
+
+  });
+});
+
