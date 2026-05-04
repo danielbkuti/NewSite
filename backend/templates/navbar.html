@@ -21,12 +21,12 @@
       <div class="flex justify-between h-16">
         <!-- Logo -->
         <div class="flex items-center">
-          <span class="text-xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">FlexMaster</span>
+          <a href="#" onclick="renderLanding(); return false;" class="text-xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">FlexMaster</a>
         </div>
 
         <!-- Desktop Menu -->
         <div class="hidden md:flex items-center space-x-6">
-            <a href="#" class="text-gray-600 hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-600 hover:bg-clip-text hover:text-transparent transition duration-300">Home</a>
+            <a href="#" onclick="renderLanding(); return false;" class="text-gray-600 hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-600 hover:bg-clip-text hover:text-transparent transition duration-300">Home</a>
             <div id="tasks-container" class="dropdown-container relative inline-block">
                 <!-- Trigger (looks like link) -->
                 <button onclick="toggleTasksMenu(event)"
@@ -45,9 +45,9 @@
                      class="dropdown-menu absolute left-0 mt-2 w-40 bg-white shadow-lg rounded z-50
               opacity-0 translate-y-2 pointer-events-none
               transition-all duration-200">
-                    <a href="/profile/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">Add New Task</a>
-                    <a href="/settings/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Upcoming Tasks</a>
-                    <a href="/logout/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Completed Tasks</a>
+                    <a href="#" onclick="showCreateTask(); return false;" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">Add New Task</a>
+                    <a href="#" onclick="loadTasks({ status: 'pending' }); return false;" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Upcoming Tasks</a>
+                    <a href="#" onclick="loadTasks({ completed: true }); return false;" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Completed Tasks</a>
                 </div>
             </div>
             <div id="goals-container" class="dropdown-container relative inline-block">
@@ -80,7 +80,7 @@
               <div class="relative group inline-block">
 
                   <!-- Button -->
-                  <button onclick="goToSettings()"
+                  <button onclick="showCreateTask()"
                           class="p-2 rounded hover:bg-gray-300 transition">
                       <i class="fa-solid fa-plus
                         text-gray-600
@@ -171,8 +171,8 @@
     <div class="h-[2000px] bg-gradient-to-b from-gray-200 to-gray-400 rounded-2xl"></div>
   </div>
 
-   <script src="../static/js/app.js">
-  </script>
+    {% load static %}
+    <script type="module" src="{% static 'js/app.js' %}"></script>
 
 </body>
 </html>

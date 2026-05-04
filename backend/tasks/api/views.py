@@ -19,8 +19,11 @@ class TaskViewSet(viewsets.ModelViewSet):
     ordering = ["-dateDeadline"]
 
     def get_queryset(self):
-        return Task.objects.filter(
-            user=self.request.user
+        return (
+            Task.objects
+            .filter(user=self.request.user)
+            .select_related("user")
+            .prefetch_related("subtasks")
         )
 
     def perform_create(self, serializer):
