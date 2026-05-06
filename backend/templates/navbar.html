@@ -1,22 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://kit.fontawesome.com/d1343b3c1c.js" crossorigin="anonymous"></script>
-</head>
-<body>
-  <style>
-  .active-gradient {
-    background: linear-gradient(to right, #3b82f6, #9333ea);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-</style>
-
-  <!-- Navbar -->
-  <nav id="navbar" class="fixed top-0 left-0 w-full z-50 transition-all duration-300 bg-transparent">
+<nav id="navbar" class="fixed top-0 left-0 w-full z-50 transition-all duration-300 bg-transparent">
     <div class="max-w-7xl mx-auto px-4">
       <div class="flex justify-between h-16">
         <!-- Logo -->
@@ -163,16 +145,11 @@
       <a href="#" class="block py-2 text-gray-600">Contact</a>
     </div>
   </nav>
-
-  <!-- Page Content (to allow scrolling) -->
-  <!-- Spacer to prevent content being hidden under fixed navbar -->
-  <div class="h-16"></div>
-  <div class="p-6 space-y-6">
-    <div class="h-[2000px] bg-gradient-to-b from-gray-200 to-gray-400 rounded-2xl"></div>
-  </div>
-
-    {% load static %}
-    <script type="module" src="{% static 'js/app.js' %}"></script>
-
-</body>
-</html>
+  
+  <style>
+  .active-gradient {
+    background: linear-gradient(to right, #3b82f6, #9333ea);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+</style>

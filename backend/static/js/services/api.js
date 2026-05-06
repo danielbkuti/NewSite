@@ -43,10 +43,47 @@ export const API = {
   }
 };
 
+export const AuthAPI = {
+  // async login(username, password) {
+  //   const res = await fetch("/user/api/login/", {
+  //     method: "POST",
+  //     headers: {
+  //       "Content-Type": "application/json",
+  //       "X-CSRFToken": getCSRFToken(),
+  //     },
+  //     credentials: "include",
+  //     body: JSON.stringify({ username, password }),
+  //   });
+
+  //   return res.json();
+  // },
+
+  // async register(username, password) {
+  //   const res = await fetch("/user/api/register/", {
+  //     method: "POST",
+  //     headers: {
+  //       "Content-Type": "application/json",
+  //       "X-CSRFToken": getCSRFToken(),
+  //     },
+  //     credentials: "include",
+  //     body: JSON.stringify({ username, password }),
+  //   });
+
+  //   return res.json();
+  // },
+
+  async logout() {
+    await fetch("/user/api/logout/", {
+      method: "POST",
+      credentials: "include",
+    });
+  }
+};
+
 function getCSRFToken() {
   const cookie = document.cookie
     .split('; ')
     .find(row => row.startsWith('csrftoken'));
 
   return cookie ? cookie.split('=')[1] : '';
-}
+};

@@ -17,27 +17,22 @@ def profile_view(request):
 
 
 def signup_view(request):
-    form = CustomSignupForm()
     if request.method == 'POST':
         form = CustomSignupForm(request.POST)
+
         if form.is_valid():
             user = form.save(commit=False)
-            user.is_active = False  # Deactivate account until email is verified
+            user.is_active = True  # simplify for now
             user.save()
 
-            # Generate token and link
-            token = account_activation_token.make_token(user)
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            login(request, user)
 
-            # Send verification email
-            message = render_to_string('account/acc_active_email.html', {
-                'user': user,
-                'domain': 'yourdomain.com',
-                'uid': uid,
-                'token': token,
-            })
-            send_mail('Activate your account', message, 'noreply@yourdomain.com', [user.email])
-            return render(request, 'account/account_activation_sent.html')
+            return redirect("/")   # go back to app
+
+        # ❗ IMPORTANT: if form invalid, fall through and render with errors
+
+    else:
+        form = CustomSignupForm()
 
     return render(request, "account/signup.html", {"form": form})
 
@@ -65,7 +60,7 @@ def login_view(request):
         if form.is_valid():
             user = form.get_user()
             login(request, user)
-            return redirect("home")
+            return redirect("/")
     else:
         form = CustomLoginForm()
 
@@ -76,4 +71,4 @@ def login_view(request):
 
 def logout_view(request):
     logout(request)
-    return redirect("home")
+    return redirect("/")

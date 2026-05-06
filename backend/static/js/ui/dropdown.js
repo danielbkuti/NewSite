@@ -1,29 +1,40 @@
-let closeTimeout;
-
 export function initDropdowns() {
+  // Prevent multiple global click listeners
+  if (!document._dropdownClickInit) {
+    document._dropdownClickInit = true;
+
+    document.addEventListener("click", (e) => {
+      document.querySelectorAll(".dropdown-container").forEach(container => {
+        if (!container.contains(e.target)) {
+          const menu = container.querySelector(".dropdown-menu");
+          const btn = container.querySelector("button");
+
+          closeMenu(menu, btn);
+        }
+      });
+    });
+  }
+
+  // Initialize each dropdown container
   document.querySelectorAll(".dropdown-container").forEach(container => {
+    if (container.dataset.initialized) return;
+
+    container.dataset.initialized = "true";
 
     const menu = container.querySelector(".dropdown-menu");
     const btn = container.querySelector("button");
 
+    if (!menu || !btn) return;
+
+    // Each container gets its own timeout
     container.addEventListener("mouseleave", () => {
-      closeTimeout = setTimeout(() => closeMenu(menu, btn), 800);
+      container._closeTimeout = setTimeout(() => {
+        closeMenu(menu, btn);
+      }, 800);
     });
 
     container.addEventListener("mouseenter", () => {
-      clearTimeout(closeTimeout);
-    });
-
-  });
-
-  document.addEventListener("click", (e) => {
-    document.querySelectorAll(".dropdown-container").forEach(container => {
-      if (!container.contains(e.target)) {
-        closeMenu(
-          container.querySelector(".dropdown-menu"),
-          container.querySelector("button")
-        );
-      }
+      clearTimeout(container._closeTimeout);
     });
   });
 }
@@ -32,8 +43,12 @@ export function toggleDropdown(event, containerId) {
   event.stopPropagation();
 
   const container = document.getElementById(containerId);
+  if (!container) return;
+
   const menu = container.querySelector(".dropdown-menu");
   const btn = container.querySelector("button");
+
+  if (!menu || !btn) return;
 
   const isOpen = menu.classList.contains("opacity-100");
 
@@ -46,7 +61,6 @@ export function toggleDropdown(event, containerId) {
 }
 
 function openMenu(menu) {
-  clearTimeout(closeTimeout);
   menu.classList.remove("opacity-0", "translate-y-2", "pointer-events-none");
   menu.classList.add("opacity-100", "translate-y-0");
 }
@@ -62,9 +76,9 @@ function closeMenu(menu, btn) {
 
 function closeAll() {
   document.querySelectorAll(".dropdown-container").forEach(container => {
-    closeMenu(
-      container.querySelector(".dropdown-menu"),
-      container.querySelector("button")
-    );
+    const menu = container.querySelector(".dropdown-menu");
+    const btn = container.querySelector("button");
+
+    closeMenu(menu, btn);
   });
 }
