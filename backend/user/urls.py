@@ -2,7 +2,15 @@
 from django.urls import path, include
 #from .views import ProfileView, CustomSignupView
 from user.views import profile_view, signup_view, login_view, logout_view, activate_view, account_activation_sent_view
-from user.api_views import check_auth
+from user.api_views import (
+    check_auth,
+    login_api,
+    logout_api,
+    signup_api,
+    signup_start_api,
+    signup_pending_api,
+    signup_complete_api,
+)
 
 urlpatterns = [
     path('profile/', profile_view, name='user_profile'),
@@ -12,6 +20,12 @@ urlpatterns = [
     path('activate/<uidb64>/<token>/', activate_view, name='activate'),
     path('account_activation_sent/', account_activation_sent_view, name='account_activation_sent'),
     path("api/auth/", check_auth, name="check_auth"),
+    path("api/login/", login_api, name="login_api"),
+    path("api/logout/", logout_api, name="logout_api"),
+    path("api/signup/", signup_api, name="signup_api"),
+    path("api/signup/start/", signup_start_api, name="signup_start_api"),
+    path("api/signup/pending/<str:token>/", signup_pending_api, name="signup_pending_api"),
+    path("api/signup/complete/<str:token>/", signup_complete_api, name="signup_complete_api"),
     #path("", include("allauth.urls")),
 
 ]

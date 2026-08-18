@@ -205,3 +205,18 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Required for the React dev server (localhost:3000) to make authenticated
+# POST/PATCH/DELETE requests against this API (localhost:8637) — Django's
+# CSRF middleware rejects cross-origin unsafe requests unless the origin is
+# explicitly trusted here, separately from CORS.
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+]
+
+# Where the React app lives — needed because the multi-step signup flow's
+# verification email links to a React route (/signup/verify/<token>/),
+# not a Django-rendered page, so this server has to know that origin
+# instead of assuming its own (unlike the old activation email, which
+# links to itself).
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")

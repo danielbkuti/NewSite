@@ -1,14 +1,12 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
 from django.contrib.auth import login, logout, get_user_model
-from django.core.mail import send_mail
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes, force_str
-from django.template.loader import render_to_string
+from django.utils.http import urlsafe_base64_decode
+from django.utils.encoding import force_str
 from .tokens import account_activation_token
 
 from .forms import CustomLoginForm, CustomSignupForm
-from .tokens import account_activation_token
+from .services import send_activation_email
 
 
 @login_required
@@ -25,18 +23,7 @@ def signup_view(request):
             user.is_active = False  # Deactivate account until email is verified
             user.save()
 
-            # Generate token and link
-            token = account_activation_token.make_token(user)
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-
-            # Send verification email
-            message = render_to_string('account/acc_active_email.html', {
-                'user': user,
-                'domain': 'yourdomain.com',
-                'uid': uid,
-                'token': token,
-            })
-            send_mail('Activate your account', message, 'noreply@yourdomain.com', [user.email])
+            send_activation_email(user)
             return render(request, 'account/account_activation_sent.html')
 
     return render(request, "account/signup.html", {"form": form})
