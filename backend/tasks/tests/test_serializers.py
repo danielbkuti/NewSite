@@ -1,8 +1,8 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from backend.tasks.models import Task
-from .tasks.api.serializers import TaskSerializer
+from ..models import Task
+from ..api.serializers import TaskSerializer
 from datetime import timedelta
 
 
