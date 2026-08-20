@@ -15,12 +15,12 @@ def profile_view(request):
 
 
 def signup_view(request):
-    form = CustomSignupForm()
     if request.method == 'POST':
         form = CustomSignupForm(request.POST)
+
         if form.is_valid():
             user = form.save(commit=False)
-            user.is_active = False  # Deactivate account until email is verified
+            user.is_active = True  # simplify for now
             user.save()
 
             send_activation_email(user)
@@ -52,7 +52,7 @@ def login_view(request):
         if form.is_valid():
             user = form.get_user()
             login(request, user)
-            return redirect("home")
+            return redirect("/")
     else:
         form = CustomLoginForm()
 
@@ -63,4 +63,4 @@ def login_view(request):
 
 def logout_view(request):
     logout(request)
-    return redirect("home")
+    return redirect("/")

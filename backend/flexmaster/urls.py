@@ -18,11 +18,11 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import RedirectView
 
-from pages.views import frontend_view
+from pages.views import app_view
 
 urlpatterns = [
 
-    path('', frontend_view, name='home'),
+    path('', app_view, name='home'),
     path('admin/', admin.site.urls),
     path('tasks/', include('tasks.urls')),
 
@@ -31,13 +31,8 @@ urlpatterns = [
         RedirectView.as_view(url="/user/%(path)s", permanent=False),
     ),
     path('user/', include('user.urls')),
+    
     # API_Views
-    path('api/', include('tasks.api.urls'))
-
-    #ALL_AUTH
-    # path('accounts/signup/', lambda request: redirect('custom_signup')),
-    # path('accounts/', include('django.contrib.auth.urls')),
-
-
-
+    path('api/', include('tasks.api.urls')),
+    path("user/api/", include("user.api_urls")),
 ]

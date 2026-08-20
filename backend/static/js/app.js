@@ -1,214 +1,148 @@
-// static/js/app.js
+// ===== IMPORTS =====
+import { API, AuthAPI } from "./services/api.js";
+import { renderLanding } from "./views/landingView.js";
+import { renderTasksView } from "./views/tasksView.js";
+import { initDropdowns, toggleDropdown } from "./ui/dropdown.js";
 
-async function fetchTasks() {
-    const list = document.getElementById("task-list");
+// ===== ROOT ELEMENT =====
+const app = document.getElementById("app");
 
-    // ✅ UX: show loading
-    list.innerHTML = "<p class='loading'>Loading...</p>";
-
-    try {
-        const response = await fetch("/api/tasks/");
-        const data = await response.json();
-
-        list.innerHTML = "";
-
-        data.results.forEach(task => {
-            const card = document.createElement("div");
-            card.className = "task-card";
-
-            const name = document.createElement("span");
-            name.className = "task-name";
-            name.textContent = task.name;
-
-            if (task.completed) {
-                name.classList.add("completed");
-            }
-
-            name.onclick = () => toggleComplete(task.id, task.completed);
-
-            const deleteBtn = document.createElement("button");
-            deleteBtn.textContent = "X";
-            deleteBtn.className = "delete-btn";
-            deleteBtn.onclick = () => deleteTask(task.id);
-
-            card.appendChild(name);
-            card.appendChild(deleteBtn);
-
-            list.appendChild(card);
-        });
-
-    } catch (error) {
-        // ✅ UX: error state
-        list.innerHTML = "Failed to load tasks.";
-        console.error(error);
-    }
-}
-
-async function createTask() {
-    const input = document.getElementById("task-input");
-
-    // ✅ UX: prevent empty tasks
-    if (!input.value.trim()) {
-        alert("Task cannot be empty");
-        return;
-    }
-
-    try {
-        await fetch("/api/tasks/", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": getCSRFToken(),
-            },
-            body: JSON.stringify({
-                name: input.value,
-                status: "pending",
-                completed: false
-            })
-        });
-
-        input.value = "";
-        fetchTasks();
-
-    } catch (error) {
-        alert("Failed to create task");
-        console.error(error);
-    }
-}
-
-async function deleteTask(taskId) {
-    try {
-        await fetch(`/api/tasks/${taskId}/`, {
-            method: "DELETE",
-            headers: {
-                "X-CSRFToken": getCSRFToken(),
-            }
-        });
-
-        fetchTasks();
-
-    } catch (error) {
-        alert("Failed to delete task");
-        console.error(error);
-    }
-}
-
-function getCSRFToken() {
-    const cookie = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('csrftoken'));
-
-    return cookie ? cookie.split('=')[1] : '';
-}
-
-async function toggleComplete(taskId, completed) {
-    try {
-        await fetch(`/api/tasks/${taskId}/`, {
-            method: "PATCH",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": getCSRFToken(),
-            },
-            body: JSON.stringify({
-                completed: !completed
-            })
-        });
-
-        fetchTasks();
-
-    } catch (error) {
-        alert("Failed to update task");
-        console.error(error);
-    }
-}
-
+// ===== AUTH =====
 async function checkAuth() {
   try {
-    const response = await fetch("/user/api/auth/", {
-      credentials: "include" // VERY IMPORTANT
+    const res = await fetch("/user/api/auth/", {
+      credentials: "include",
     });
-
-    const data = await response.json();
-    console.log(data);
-    return data;
-    
-
-  } catch (error) {
-    console.error("Auth check failed", error);
+    return await res.json();
+  } catch (err) {
+    console.error("Auth check failed:", err);
     return { authenticated: false };
   }
 }
+// async function initCSRF() {
+//   await fetch("/user/api/csrf/", {
+//     credentials: "include"
+//   });
+// }
 
+// ===== CONTROLLER =====
+async function loadTasks(params = {}) {
+  try {
+    const data = await API.getTasks(params);
 
-// Landing Page
-function renderLanding(app) {
-  app.innerHTML = `
-    <div style="padding:20px">
-      <h1>Welcome to Task Manager</h1>
-      <p>Please log in</p>
-      <a href="/login/">Login</a>
-    </div>
-  `;
+    if (!data || !data.results) {
+      throw new Error("Invalid response");
+    }
 
-
-  document.getElementById("goTasks").onclick = renderTasks;
-  document.getElementById("toggleTest").onclick = renderBlank;
+    renderTasksView(app, data.results);
+  } catch (err) {
+    console.error("Failed to load tasks:", err);
+    app.innerHTML = `<p class="text-red-500">Failed to load tasks</p>`;
+  }
 }
 
-// Task Page
-function renderTasks() {
-  app.innerHTML = `
-    <div style="padding:20px">
-      <h1>Your Tasks</h1>
-      <div id="task-list">Loading...</div>
-      <button id="goHome">Back</button>
-    </div>
-  `;
+// ===== TASK ACTIONS (GLOBAL) =====
+window.deleteTask = async (id) => {
+  await API.deleteTask(id);
+  loadTasks();
+};
 
-  document.getElementById("goHome").onclick = renderLanding;
-  document.getElementById("toggleTest").onclick = renderBlank;
+window.toggleComplete = async (id, completed) => {
+  await API.toggleTask(id, completed);
+  loadTasks();
+};
 
-  // THEN fetch data
-  fetchTasks();
-}
+// ===== NAVBAR FUNCTIONS =====
 
-function renderBlank(){
-    app.innerHTML =  '';
+// Home
+window.renderLanding = () => {
+  renderLanding(app);
+};
 
-    document.getElementById("toggleTest").onclick = renderLanding;
-}
-function toggleTasksMenu() {
-  const menu = document.getElementById("dropdown-tasks");
-  const btn = event.currentTarget;
+// Load tasks from navbar
+window.loadTasks = loadTasks;
 
-  menu.classList.toggle("hidden");
-  btn.classList.toggle("text-transparent");
-  btn.classList.toggle("bg-clip-text");
-  btn.classList.toggle("bg-gradient-to-r");
-  btn.classList.toggle("from-blue-500");
-  btn.classList.toggle("to-purple-600");
-}
-function toggleGoalsMenu() {
-  const menu = document.getElementById("dropdown-goals");
-  const btn = event.currentTarget;
+// Dropdowns
 
-  menu.classList.toggle("hidden");
-  btn.classList.toggle("text-transparent");
-  btn.classList.toggle("bg-clip-text");
-  btn.classList.toggle("bg-gradient-to-r");
-  btn.classList.toggle("from-blue-500");
-  btn.classList.toggle("to-purple-600");
-}
+window.toggleTasksMenu = (event) => {
+  toggleDropdown(event, "tasks-container");
+};
 
-// Initial load
-// document.addEventListener("DOMContentLoaded", async () => {
-//     const app = document.getElementById("app");
-//     app.innerHTML = "";
-//     const auth = await checkAuth();
+window.toggleGoalsMenu = (event) => {
+  toggleDropdown(event, "goals-container");
+};
 
-//   if (auth.authenticated) {
-//     renderTasks(app, auth.username);
+// Future feature
+window.showCreateTask = () => {
+  console.log("TODO: show create task UI");
+};
+
+//   window.handleLogin = async () => {
+//   const username = document.getElementById("username").value;
+//   const password = document.getElementById("password").value;
+
+//   const res = await AuthAPI.login(username, password);
+
+//   if (res.error) {
+//     document.getElementById("error").innerText = res.error;
 //   } else {
-//     renderLanding(app);
+//     loadTasks(); // redirect into app
 //   }
-// });
+// };
+
+// window.handleRegister = async () => {
+//   const username = document.getElementById("username").value;
+//   const password = document.getElementById("password").value;
+
+//   const res = await AuthAPI.register(username, password);
+
+//   if (res.error) {
+//     document.getElementById("error").innerText = res.error;
+//   } else {
+//     loadTasks();
+//   }
+// };
+
+// Logout
+window.logout = async () => {
+  await AuthAPI.logout();
+  renderLanding(app);
+};
+
+// ===== FILTER + SORT CONTROLS =====
+function attachTaskControls() {
+  const filter = document.getElementById("filter-status");
+  const sort = document.getElementById("sort-order");
+  const btn = document.getElementById("applyFilters");
+
+  if (!filter || !sort || !btn) return;
+
+  btn.onclick = () => {
+    const params = {};
+
+    if (filter.value) {
+      params.status = filter.value;
+    }
+
+    if (sort.value) {
+      params.ordering = sort.value;
+    }
+
+    loadTasks(params);
+  };
+}
+
+// ===== INIT =====
+document.addEventListener("DOMContentLoaded", async () => {
+  initDropdowns();
+
+  //await initCSRF();   // 🔥 MUST COME FIRST
+
+  const auth = await checkAuth();
+
+  if (auth.authenticated) {
+    loadTasks();
+  } else {
+    renderLanding(app);
+  }
+});

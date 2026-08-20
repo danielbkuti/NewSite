@@ -50,17 +50,6 @@ class TaskSerializer(serializers.ModelSerializer):
 
         return data
 
-    def get_queryset(self):
-        return (
-            Task.objects
-            .filter(user=self.request.user)
-            .select_related("user")
-            .prefetch_related("subtasks")
-            .order_by("-dateDeadline")
-        )
-
-
-
     class Meta:
         model = Task
         fields = [

@@ -1,28 +1,18 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://kit.fontawesome.com/d1343b3c1c.js" crossorigin="anonymous"></script>
-</head>
-<body>
-
-  <!-- Navbar -->
-  <nav id="navbar" class="fixed top-0 left-0 w-full z-50 transition-all duration-300 bg-transparent">
+<nav id="navbar" class="fixed top-0 left-0 w-full z-50 transition-all duration-300 bg-transparent">
     <div class="max-w-7xl mx-auto px-4">
       <div class="flex justify-between h-16">
         <!-- Logo -->
         <div class="flex items-center">
-          <span class="text-xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">FlexMaster</span>
+          <a href="#" onclick="renderLanding(); return false;" class="text-xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">FlexMaster</a>
         </div>
 
         <!-- Desktop Menu -->
         <div class="hidden md:flex items-center space-x-6">
-            <a href="#" class="text-gray-600 hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-600 hover:bg-clip-text hover:text-transparent transition duration-300">Home</a>
-            <div class="relative inline-block">
+            <a href="#" onclick="renderLanding(); return false;" class="text-gray-600 hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-600 hover:bg-clip-text hover:text-transparent transition duration-300">Home</a>
+            <div id="tasks-container" class="dropdown-container relative inline-block">
                 <!-- Trigger (looks like link) -->
-                <button onclick="toggleTasksMenu()"
+                <button onclick="toggleTasksMenu(event)"
+                id="tasks-btn"
                         class="text-gray-600
                  hover:bg-gradient-to-r
                  hover:from-blue-500
@@ -33,16 +23,19 @@
                     Tasks
                 </button>
                 <!-- Dropdown -->
-                <div id=down-tasks"
-                     class=""dropabsolute left-0 mt-2 w-40 bg-white shadow-lg rounded hidden z-50">
-                    <a href="/profile/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">Add New Task</a>
-                    <a href="/settings/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Upcoming Tasks</a>
-                    <a href="/logout/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Completed Tasks</a>
+                <div id="dropdown-tasks"
+                     class="dropdown-menu absolute left-0 mt-2 w-40 bg-white shadow-lg rounded z-50
+              opacity-0 translate-y-2 pointer-events-none
+              transition-all duration-200">
+                    <a href="#" onclick="showCreateTask(); return false;" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">Add New Task</a>
+                    <a href="#" onclick="loadTasks({ status: 'pending' }); return false;" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Upcoming Tasks</a>
+                    <a href="#" onclick="loadTasks({ completed: true }); return false;" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Completed Tasks</a>
                 </div>
             </div>
-            <div class="relative inline-block">
+            <div id="goals-container" class="dropdown-container relative inline-block">
                 <!-- Trigger (looks like link) -->
-                <button onclick="toggleGoalsMenu()"
+                <button onclick="toggleGoalsMenu(event)"
+                id = "goals-btn"
                         class="text-gray-600
                  hover:bg-gradient-to-r
                  hover:from-blue-500
@@ -54,7 +47,9 @@
                 </button>
                 <!-- Dropdown -->
                 <div id="dropdown-goals"
-                     class="absolute left-0 mt-2 w-40 bg-white shadow-lg rounded hidden z-50">
+                     class="dropdown-menu absolute left-0 mt-2 w-40 bg-white shadow-lg rounded z-50
+              opacity-0 translate-y-2 pointer-events-none
+              transition-all duration-200">
                     <a href="/profile/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">Create a new Goal</a>
                     <a href="/settings/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Goals</a>
                     <a href="/logout/" class="block px-4 py-2 text-gray-600 hover:bg-gray-100">View Completed Goals</a>
@@ -67,7 +62,7 @@
               <div class="relative group inline-block">
 
                   <!-- Button -->
-                  <button onclick="goToSettings()"
+                  <button onclick="showCreateTask()"
                           class="p-2 rounded hover:bg-gray-300 transition">
                       <i class="fa-solid fa-plus
                         text-gray-600
@@ -150,16 +145,11 @@
       <a href="#" class="block py-2 text-gray-600">Contact</a>
     </div>
   </nav>
-
-  <!-- Page Content (to allow scrolling) -->
-  <!-- Spacer to prevent content being hidden under fixed navbar -->
-  <div class="h-16"></div>
-  <div class="p-6 space-y-6">
-    <div class="h-[2000px] bg-gradient-to-b from-gray-200 to-gray-400 rounded-2xl"></div>
-  </div>
-
-   <script src="/static/js/app.js">
-  </script>
-
-</body>
-</html>
+  
+  <style>
+  .active-gradient {
+    background: linear-gradient(to right, #3b82f6, #9333ea);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+</style>
