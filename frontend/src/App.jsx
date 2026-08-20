@@ -1,22 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import './App.css'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { LoginForm } from '@/components/LoginForm'
 import { SignupForm } from '@/components/SignupForm'
 import { SignupVerify } from '@/components/SignupVerify'
+import { TaskList } from '@/components/TaskList'
 import { checkAuth, logout } from '@/lib/auth'
-
-// Placeholder data — still not real API data. That's the next step, now
-// that we can actually authenticate to reach /api/tasks/.
-const tasks = [
-  { id: 1, name: 'Set up frontend tooling', status: 'done' },
-  { id: 2, name: 'Wire up the Django API', status: 'pending' },
-  { id: 3, name: 'Build the task list screen', status: 'pending' },
-]
 
 // Shared shell for both auth screens (login + signup) — the gradient
 // background, the top-left logo, and the bottom info bar are identical on
@@ -82,21 +72,7 @@ function App() {
             </div>
           </div>
 
-          {tasks.map((task) => (
-            <Card key={task.id}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Checkbox checked={task.status === 'done'} />
-                  {task.name}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Badge variant={task.status === 'done' ? 'default' : 'secondary'}>
-                  {task.status}
-                </Badge>
-              </CardContent>
-            </Card>
-          ))}
+          <TaskList />
         </div>
       </div>
     )
