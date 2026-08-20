@@ -20,7 +20,7 @@ def signup_view(request):
 
         if form.is_valid():
             user = form.save(commit=False)
-            user.is_active = True  # simplify for now
+            user.is_active = False  # Deactivate account until email is verified
             user.save()
 
             send_activation_email(user)
