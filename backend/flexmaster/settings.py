@@ -163,10 +163,6 @@ AUTHENTICATION_BACKENDS = [
     #"allauth.account.auth_backends.AuthenticationBackend",
 ]
 
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:8637",
-    "http://127.0.0.1:8637",
-]
 # SOCIALACCOUNT_PROVIDERS = {}
 #
 

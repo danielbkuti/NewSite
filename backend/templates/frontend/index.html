@@ -1,0 +1,60 @@
+<!-- templates/frontend/index.html -->
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FlexMaster</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://kit.fontawesome.com/d1343b3c1c.js" crossorigin="anonymous"></script>
+  </head>
+<body>
+  <div class="container">
+
+      <h1>FlexMaster</h1>
+      <div id="app"></div>
+      
+      <div class="clear-button" id = "clear-button">
+        <button type="button" id="toggleTest"> Reset</button>
+      </div>
+
+      <div class="task-input">
+          <input id="task-input" placeholder="Enter a task..." />
+          <button onclick="createTask()">Add</button>
+      </div>
+
+      <div id="task-list" class="task-list"></div>
+
+  <!-- Bottom Navigation -->
+  <nav class="fixed bottom-0 left-0 w-full bg-gray-900 text-white border-t border-gray-700 shadow-lg">
+  <div class="flex justify-around items-center h-16">
+
+    <!-- Home -->
+    <a href="#" class="flex flex-col items-center text-sm hover:text-blue-400 transition">
+      <span><i class="fa-solid fa-house" style="color: rgb(140, 12, 208);"></i> Home</span>
+    </a>
+
+    <!-- Tasks -->
+    <a href="#" class="flex flex-col items-center text-sm hover:text-blue-400 transition">
+      <span><i class="fa-solid fa-clipboard" style="color: rgb(140, 12, 208);"></i> Tasks</span>
+    </a>
+
+    <!-- Add -->
+    <a href="#" class="flex flex-col items-center text-sm hover:text-blue-400 transition">
+      <span> <i class="fa-solid fa-plus" style="color: rgb(140, 12, 208);"></i> Add</span>
+    </a>
+
+    <!-- Profile -->
+    <a href="#" class="flex flex-col items-center text-sm hover:text-blue-400 transition">
+      
+      <span><i class="fa-solid fa-user" style="color: rgb(140, 12, 208);"></i> Profile</span>
+    </a>
+
+  </div>
+</nav>
+
+  </div>
+  <script src="/static/js/app.js"></script>
+
+  </body>
+</html>
