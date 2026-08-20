@@ -1,14 +1,12 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
 from django.contrib.auth import login, logout, get_user_model
-from django.core.mail import send_mail
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes, force_str
-from django.template.loader import render_to_string
+from django.utils.http import urlsafe_base64_decode
+from django.utils.encoding import force_str
 from .tokens import account_activation_token
 
 from .forms import CustomLoginForm, CustomSignupForm
-from .tokens import account_activation_token
+from .services import send_activation_email
 
 
 @login_required
@@ -25,14 +23,8 @@ def signup_view(request):
             user.is_active = True  # simplify for now
             user.save()
 
-            login(request, user)
-
-            return redirect("/")   # go back to app
-
-        # ❗ IMPORTANT: if form invalid, fall through and render with errors
-
-    else:
-        form = CustomSignupForm()
+            send_activation_email(user)
+            return render(request, 'account/account_activation_sent.html')
 
     return render(request, "account/signup.html", {"form": form})
 
