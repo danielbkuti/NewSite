@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,7 +21,10 @@ const LOGO_GRADIENT_STYLE = {
 // see SignupVerify.jsx), possibly on a different device, so this component's
 // job ends the moment the email is sent.
 export function SignupForm() {
-  const [email, setEmail] = useState('')
+  // Pre-filled when arriving from the landing page's email box, which
+  // already checked this address is unrecognized — saves retyping it here.
+  const location = useLocation()
+  const [email, setEmail] = useState(location.state?.email ?? '')
   const [focused, setFocused] = useState(false)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)

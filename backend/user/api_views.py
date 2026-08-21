@@ -290,3 +290,22 @@ def signup_complete_api(request, token):
         "authenticated": True,
         "username": user.username,
     })
+
+
+@require_http_methods(["GET"])
+def check_email_exists(request):
+    """
+    Lets the landing page's single email box route to login vs. signup
+    without the visitor picking which one themselves.
+
+    Worth knowing: this is a real, if minor, email-enumeration surface —
+    anyone can probe arbitrary addresses to learn which ones have
+    accounts. Common tradeoff for this exact UX pattern; flagging it
+    rather than silently shipping it.
+    """
+    email = request.GET.get("email", "").strip().lower()
+    if not email:
+        return JsonResponse({"detail": "Email is required."}, status=400)
+
+    exists = User.objects.filter(email__iexact=email).exists()
+    return JsonResponse({"exists": exists})

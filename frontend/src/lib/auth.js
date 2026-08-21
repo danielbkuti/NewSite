@@ -59,3 +59,7 @@ export function completeSignup(token, { password1, password2 }) {
     body: { password1, password2 },
   })
 }
+
+export function checkEmailExists(email) {
+  return apiFetch(`/user/api/email-exists/?email=${encodeURIComponent(email)}`)
+}

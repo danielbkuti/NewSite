@@ -1,19 +1,34 @@
 import { useEffect, useState } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import './App.css'
 import { Button } from '@/components/ui/button'
 import { LoginForm } from '@/components/LoginForm'
 import { SignupForm } from '@/components/SignupForm'
 import { SignupVerify } from '@/components/SignupVerify'
+import { LandingPage } from '@/components/LandingPage'
 import { TaskList } from '@/components/TaskList'
 import { checkAuth, logout } from '@/lib/auth'
 
-// Shared shell for both auth screens (login + signup) — the gradient
-// background, the top-left logo, and the bottom info bar are identical on
-// both; only the card in the middle changes.
+// Wraps every public route (landing, login, signup, verify) so the
+// gradient is one persistent element that never unmounts as you
+// navigate between them — not a copy re-painted on each page. <Outlet />
+// is where React Router renders whichever child route actually matched.
+function PublicLayout() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#e0c3fc] via-[#7c5fb0] to-[#8ec5fc]">
+      <Outlet />
+    </div>
+  )
+}
+
+// Shared shell for the auth screens (login + signup + verify) — the
+// top-left logo and the bottom info bar are identical on all three; only
+// the card in the middle changes. The gradient itself now lives on
+// PublicLayout, one level up, so it isn't duplicated here.
+
 function AuthLayout({ children }) {
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-[#e0c3fc] via-[#7c5fb0] to-[#8ec5fc] p-8">
+    <div className="relative flex min-h-screen items-center justify-center p-8">
       <span className="absolute top-6 left-8 bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-xl font-bold text-transparent">
         FlexMaster
       </span>
@@ -81,43 +96,48 @@ function App() {
   // anonymous — real routes now, instead of one hardcoded card
   return (
     <Routes>
-      <Route
-        path="/login"
-        element={
-          <AuthLayout>
-            <LoginForm
-              onLoginSuccess={(data) => {
-                setUsername(data.username)
-                setAuthState('authenticated')
-              }}
-            />
-          </AuthLayout>
-        }
-      />
-      <Route
-        path="/signup"
-        element={
-          <AuthLayout>
-            <SignupForm />
-          </AuthLayout>
-        }
-      />
-      <Route
-        path="/signup/verify/:token"
-        element={
-          <AuthLayout>
-            <SignupVerify
-              onSignupSuccess={(data) => {
-                setUsername(data.username)
-                setAuthState('authenticated')
-              }}
-            />
-          </AuthLayout>
-        }
-      />
-      {/* No landing page yet — that's a separate task. Everything else
-          falls back to login for now. */}
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      {/* Every public route nests under PublicLayout, so the gradient is
+          one persistent element shared across all of them, not a copy
+          re-painted per page. */}
+      <Route element={<PublicLayout />}>
+        <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/login"
+          element={
+            <AuthLayout>
+              <LoginForm
+                onLoginSuccess={(data) => {
+                  setUsername(data.username)
+                  setAuthState('authenticated')
+                }}
+              />
+            </AuthLayout>
+          }
+        />
+        <Route
+          path="/signup"
+          element={
+            <AuthLayout>
+              <SignupForm />
+            </AuthLayout>
+          }
+        />
+        <Route
+          path="/signup/verify/:token"
+          element={
+            <AuthLayout>
+              <SignupVerify
+                onSignupSuccess={(data) => {
+                  setUsername(data.username)
+                  setAuthState('authenticated')
+                }}
+              />
+            </AuthLayout>
+          }
+        />
+      </Route>
+      {/* Unmatched paths land on the real homepage now, not login. */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }
