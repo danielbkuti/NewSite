@@ -10,6 +10,7 @@ from user.api_views import (
     signup_start_api,
     signup_pending_api,
     signup_complete_api,
+    check_email_exists,
 )
 
 urlpatterns = [
@@ -26,6 +27,7 @@ urlpatterns = [
     path("api/signup/start/", signup_start_api, name="signup_start_api"),
     path("api/signup/pending/<str:token>/", signup_pending_api, name="signup_pending_api"),
     path("api/signup/complete/<str:token>/", signup_complete_api, name="signup_complete_api"),
+    path("api/email-exists/", check_email_exists, name="check_email_exists"),
     #path("", include("allauth.urls")),
 
 ]

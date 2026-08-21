@@ -1,12 +1,16 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { login } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
 export function LoginForm({ onLoginSuccess }) {
-  const [username, setUsername] = useState('')
+  // Pre-filled when arriving from the landing page's email box, which
+  // already checked this address belongs to an existing account — saves
+  // retyping it here.
+  const location = useLocation()
+  const [username, setUsername] = useState(location.state?.email ?? '')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
