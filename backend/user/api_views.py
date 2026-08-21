@@ -10,14 +10,12 @@ from django.views.decorators.http import require_http_methods
 
 from .forms import (
     CustomLoginForm,
-    CustomSignupForm,
     SignupStartForm,
     SignupDetailsForm,
     SignupCompleteForm,
 )
 from .models import PendingSignup, generate_signup_token
 from .services import (
-    send_activation_email,
     send_signup_verification_email,
     generate_username_from_name,
 )
@@ -77,41 +75,6 @@ def login_api(request):
 def logout_api(request):
     logout(request)
     return JsonResponse({"authenticated": False})
-
-
-@require_http_methods(["POST"])
-def signup_api(request):
-    """
-    JSON counterpart to the existing template-based signup_view. Reuses
-    CustomSignupForm for validation and services.send_activation_email for
-    the activation email, so both entry points share the exact same rules.
-
-    Does NOT log the user in — the account is created inactive
-    (is_active=False) until they click the emailed activation link, same
-    as the original flow.
-    """
-    try:
-        data = json.loads(request.body or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"detail": "Invalid JSON body."}, status=400)
-
-    form = CustomSignupForm(data)
-    if form.is_valid():
-        user = form.save(commit=False)
-        user.is_active = False
-        user.save()
-
-        send_activation_email(user)
-
-        return JsonResponse({
-            "success": True,
-            "username": user.username,
-        })
-
-    return JsonResponse({
-        "success": False,
-        "errors": form.errors.get_json_data(),
-    }, status=400)
 
 
 @require_http_methods(["POST"])
