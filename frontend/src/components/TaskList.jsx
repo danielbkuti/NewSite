@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
 import { TaskCard } from '@/components/TaskCard'
 import { Button } from '@/components/ui/button'
-import { fetchTasks, createTask, updateTask, deleteTask } from '@/lib/tasks'
+import {
+  fetchTasks,
+  fetchTask,
+  createTask,
+  updateTask,
+  deleteTask,
+  createSubTask,
+  updateSubTask,
+  deleteSubTask,
+} from '@/lib/tasks'
 
 export function TaskList() {
   // 'loading' | 'ready' | 'error'
@@ -69,6 +78,31 @@ export function TaskList() {
     }
   }
 
+  // Re-fetches one task and replaces it in local state — used after any
+  // subtask mutation. Completing/adding a subtask can flip the parent
+  // task's own `completed` field server-side (Task.update_completion_status),
+  // so pulling the authoritative task back down is simpler and safer
+  // than re-deriving that logic here.
+  async function refreshTask(taskId) {
+    const fresh = await fetchTask(taskId)
+    setTasks((current) => current.map((t) => (t.id === taskId ? fresh : t)))
+  }
+
+  async function handleAddSubtask(task, name) {
+    await createSubTask({ task: task.id, name })
+    await refreshTask(task.id)
+  }
+
+  async function handleToggleSubtask(task, subtask, completed) {
+    await updateSubTask(subtask.id, { completed })
+    await refreshTask(task.id)
+  }
+
+  async function handleDeleteSubtask(task, subtask) {
+    await deleteSubTask(subtask.id)
+    await refreshTask(task.id)
+  }
+
   async function handleAdd(event) {
     event.preventDefault()
     setAddError(null)
@@ -127,6 +161,9 @@ export function TaskList() {
             onToggleComplete={handleToggle}
             onSetDeadline={handleSetDeadline}
             onDelete={handleDelete}
+            onAddSubtask={handleAddSubtask}
+            onToggleSubtask={handleToggleSubtask}
+            onDeleteSubtask={handleDeleteSubtask}
           />
         ))
       )}

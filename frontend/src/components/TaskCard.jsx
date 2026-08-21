@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { SubtaskList } from '@/components/SubtaskList'
 import { cn } from '@/lib/utils'
 
 const STATUS_LABEL = {
@@ -31,7 +32,15 @@ function formatDeadline(iso) {
 // with the task and the new value; the parent (TaskList) owns updating
 // the server and reconciling local state — this component never talks
 // to the API directly.
-export function TaskCard({ task, onToggleComplete, onSetDeadline, onDelete }) {
+export function TaskCard({
+  task,
+  onToggleComplete,
+  onSetDeadline,
+  onDelete,
+  onAddSubtask,
+  onToggleSubtask,
+  onDeleteSubtask,
+}) {
   const [editingDeadline, setEditingDeadline] = useState(false)
   const [deadlineInput, setDeadlineInput] = useState(
     task.dateDeadline ? task.dateDeadline.slice(0, 10) : ''
@@ -125,7 +134,12 @@ export function TaskCard({ task, onToggleComplete, onSetDeadline, onDelete }) {
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         <Badge variant={task.completed ? 'default' : 'secondary'}>
-          {STATUS_LABEL[task.status] ?? task.status}
+          {/* A subtask finishing off the last one can flip task.completed
+              to true server-side (Task.update_completion_status) without
+              touching task.status — fall back to "completed" whenever
+              completed is true so the label can't say "pending" on a
+              checked-off task. */}
+          {task.completed ? STATUS_LABEL.completed : (STATUS_LABEL[task.status] ?? task.status)}
         </Badge>
         {deleteError && <p className="text-xs text-destructive">{deleteError}</p>}
 
@@ -165,6 +179,13 @@ export function TaskCard({ task, onToggleComplete, onSetDeadline, onDelete }) {
         )}
 
         {deadlineError && <p className="text-xs text-destructive">{deadlineError}</p>}
+
+        <SubtaskList
+          task={task}
+          onAdd={(name) => onAddSubtask(task, name)}
+          onToggle={(subtask, completed) => onToggleSubtask(task, subtask, completed)}
+          onDelete={(subtask) => onDeleteSubtask(task, subtask)}
+        />
       </CardContent>
     </Card>
   )
