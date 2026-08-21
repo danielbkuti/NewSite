@@ -15,21 +15,7 @@ export function logout() {
   return apiFetch('/user/api/logout/', { method: 'POST' })
 }
 
-export function signup({ username, firstName, lastName, email, password1, password2 }) {
-  return apiFetch('/user/api/signup/', {
-    method: 'POST',
-    body: {
-      username,
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      password1,
-      password2,
-    },
-  })
-}
-
-// --- New multi-step signup flow ---
+// --- Multi-step signup flow ---
 
 export function startSignup(email) {
   return apiFetch('/user/api/signup/start/', {
