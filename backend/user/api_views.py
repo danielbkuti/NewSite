@@ -38,6 +38,7 @@ def check_auth(request):
         return JsonResponse({
             "authenticated": True,
             "username": request.user.username,
+            "first_name": request.user.first_name,
         })
     else:
         return JsonResponse({
@@ -63,6 +64,7 @@ def login_api(request):
         return JsonResponse({
             "authenticated": True,
             "username": user.username,
+            "first_name": user.first_name,
         })
 
     return JsonResponse({
@@ -252,6 +254,7 @@ def signup_complete_api(request, token):
         "success": True,
         "authenticated": True,
         "username": user.username,
+        "first_name": user.first_name,
     })
 
 
