@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { TaskCard } from '@/components/TaskCard'
 import { Button } from '@/components/ui/button'
-import { fetchTasks, createTask, updateTask } from '@/lib/tasks'
+import { fetchTasks, createTask, updateTask, deleteTask } from '@/lib/tasks'
 
 export function TaskList() {
   // 'loading' | 'ready' | 'error'
@@ -51,6 +51,20 @@ export function TaskList() {
       setTasks((current) =>
         current.map((t) => (t.id === task.id ? { ...t, dateDeadline: previous } : t))
       )
+      throw err
+    }
+  }
+
+  // Optimistic like the others, but re-throws on failure — TaskCard
+  // awaits this itself so it can show a delete-specific error next to
+  // the confirm button instead of the task just silently reappearing.
+  async function handleDelete(task) {
+    const previous = tasks
+    setTasks((current) => current.filter((t) => t.id !== task.id))
+    try {
+      await deleteTask(task.id)
+    } catch (err) {
+      setTasks(previous)
       throw err
     }
   }
@@ -112,6 +126,7 @@ export function TaskList() {
             task={task}
             onToggleComplete={handleToggle}
             onSetDeadline={handleSetDeadline}
+            onDelete={handleDelete}
           />
         ))
       )}
