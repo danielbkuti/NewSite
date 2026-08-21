@@ -20,3 +20,7 @@ export function updateTask(id, updates) {
     body: updates,
   })
 }
+
+export function deleteTask(id) {
+  return apiFetch(`/api/tasks/${id}/`, { method: 'DELETE' })
+}

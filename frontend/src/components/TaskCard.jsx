@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Trash2 } from 'lucide-react'
+import { Card, CardHeader, CardTitle, CardAction, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -30,13 +31,34 @@ function formatDeadline(iso) {
 // with the task and the new value; the parent (TaskList) owns updating
 // the server and reconciling local state — this component never talks
 // to the API directly.
-export function TaskCard({ task, onToggleComplete, onSetDeadline }) {
+export function TaskCard({ task, onToggleComplete, onSetDeadline, onDelete }) {
   const [editingDeadline, setEditingDeadline] = useState(false)
   const [deadlineInput, setDeadlineInput] = useState(
     task.dateDeadline ? task.dateDeadline.slice(0, 10) : ''
   )
   const [deadlineError, setDeadlineError] = useState(null)
   const [savingDeadline, setSavingDeadline] = useState(false)
+
+  // Two clicks to actually delete: the first just reveals a confirm
+  // step, in-line rather than a browser confirm() dialog, matching how
+  // the deadline editor already opens in place. Only reset `deleting`
+  // on failure — on success the card unmounts along with the rest of
+  // this state.
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(null)
+
+  async function handleDeleteConfirm() {
+    setDeleteError(null)
+    setDeleting(true)
+    try {
+      await onDelete(task)
+    } catch (err) {
+      setDeleteError(err.data?.detail ?? 'Could not delete this task.')
+      setDeleting(false)
+      setConfirmingDelete(false)
+    }
+  }
 
   async function handleDeadlineSubmit(event) {
     event.preventDefault()
@@ -68,11 +90,44 @@ export function TaskCard({ task, onToggleComplete, onSetDeadline }) {
             {task.name}
           </span>
         </CardTitle>
+        <CardAction>
+          {confirmingDelete ? (
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={handleDeleteConfirm}
+                disabled={deleting}
+              >
+                {deleting ? 'Deleting…' : 'Confirm'}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setConfirmingDelete(false)}
+                disabled={deleting}
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => setConfirmingDelete(true)}
+              aria-label="Delete task"
+            >
+              <Trash2 />
+            </Button>
+          )}
+        </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         <Badge variant={task.completed ? 'default' : 'secondary'}>
           {STATUS_LABEL[task.status] ?? task.status}
         </Badge>
+        {deleteError && <p className="text-xs text-destructive">{deleteError}</p>}
 
         {editingDeadline ? (
           <form onSubmit={handleDeadlineSubmit} className="flex items-center gap-2">
