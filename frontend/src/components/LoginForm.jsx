@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { Eye, EyeOff } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { login } from '@/lib/auth'
@@ -12,6 +13,7 @@ export function LoginForm({ onLoginSuccess }) {
   const location = useLocation()
   const [username, setUsername] = useState(location.state?.email ?? '')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   // Tracks which field currently has focus ('username' | 'password' | null)
@@ -107,17 +109,28 @@ export function LoginForm({ onLoginSuccess }) {
             >
               Password
             </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onFocus={() => setFocusedField('password')}
-              onBlur={() => setFocusedField((f) => (f === 'password' ? null : f))}
-              autoComplete="current-password"
-              className="border-0 bg-transparent p-0 text-sm text-black outline-none"
-              required
-            />
+            <div className="flex items-center gap-2">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField((f) => (f === 'password' ? null : f))}
+                autoComplete="current-password"
+                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-black outline-none"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                tabIndex={-1}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="text-black/50 hover:text-black/80"
+              >
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
           </div>
 
           {/* 5. Error directly under the fields, small + red */}
