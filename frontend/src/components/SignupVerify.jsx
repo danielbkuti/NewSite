@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { SignupProgress } from '@/components/SignupProgress'
@@ -8,6 +8,9 @@ import { checkPendingSignup, submitSignupDetails, completeSignup } from '@/lib/a
 import { cn } from '@/lib/utils'
 
 // Same boxed-field pattern used everywhere else in the auth forms.
+// type="password" fields get a show/hide toggle for free — each
+// instance tracks its own visibility, so revealing password1 doesn't
+// also reveal password2.
 function AuthField({
   id,
   label,
@@ -21,6 +24,9 @@ function AuthField({
   autoComplete,
   required = true,
 }) {
+  const [visible, setVisible] = useState(false)
+  const isPassword = type === 'password'
+
   return (
     <div className="flex flex-col gap-0.5">
       <div
@@ -38,17 +44,30 @@ function AuthField({
         >
           {label}
         </label>
-        <input
-          id={id}
-          type={type}
-          value={value}
-          onChange={onChange}
-          onFocus={onFocus}
-          onBlur={onBlur}
-          autoComplete={autoComplete}
-          required={required}
-          className="border-0 bg-transparent p-0 text-sm text-black outline-none"
-        />
+        <div className="flex items-center gap-2">
+          <input
+            id={id}
+            type={isPassword && visible ? 'text' : type}
+            value={value}
+            onChange={onChange}
+            onFocus={onFocus}
+            onBlur={onBlur}
+            autoComplete={autoComplete}
+            required={required}
+            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-black outline-none"
+          />
+          {isPassword && (
+            <button
+              type="button"
+              onClick={() => setVisible((v) => !v)}
+              tabIndex={-1}
+              aria-label={visible ? 'Hide password' : 'Show password'}
+              className="text-black/50 hover:text-black/80"
+            >
+              {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+          )}
+        </div>
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
@@ -275,6 +294,16 @@ export function SignupVerify({ onSignupSuccess }) {
             Please provide a password to finish creating your account.
           </p>
         </div>
+
+        {/* Mirrors the backend's actual AUTH_PASSWORD_VALIDATORS config
+            (backend/flexmaster/settings.py) — keep in sync if that list
+            changes. */}
+        <ul className="list-disc space-y-0.5 rounded-md bg-black/5 px-4 py-3 pl-8 text-xs text-black/60">
+          <li>At least 8 characters</li>
+          <li>Not entirely numbers</li>
+          <li>Not a commonly used password</li>
+          <li>Not too similar to your name, username, or email</li>
+        </ul>
 
         <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-4">
           <AuthField

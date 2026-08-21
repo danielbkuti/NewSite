@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { SignupProgress } from '@/components/SignupProgress'
-import { startSignup } from '@/lib/auth'
+import { checkEmailExists, startSignup } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
 // Same "reflect the page gradient" fill used on the logo elsewhere — kept
@@ -24,6 +24,7 @@ export function SignupForm() {
   // Pre-filled when arriving from the landing page's email box, which
   // already checked this address is unrecognized — saves retyping it here.
   const location = useLocation()
+  const navigate = useNavigate()
   const [email, setEmail] = useState(location.state?.email ?? '')
   const [focused, setFocused] = useState(false)
   const [error, setError] = useState(null)
@@ -36,9 +37,27 @@ export function SignupForm() {
     setSubmitting(true)
 
     try {
+      // Check first rather than let startSignup's own "already exists"
+      // validation fire — an existing account means this person actually
+      // wants to log in, so send them there with the email already
+      // filled in instead of just showing an error on a form they can't
+      // usefully submit.
+      const { exists } = await checkEmailExists(email)
+      if (exists) {
+        navigate('/login', { state: { email } })
+        return
+      }
+
       await startSignup(email)
       setSubmitted(true)
     } catch (err) {
+      // Fallback for the same "already exists" case if it somehow still
+      // reaches startSignup (e.g. an account created between the check
+      // above and this submit) — same redirect, not a dead-end error.
+      if (err.data?.errors?.email?.[0]?.message?.includes('already exists')) {
+        navigate('/login', { state: { email } })
+        return
+      }
       const message =
         err.data?.errors?.email?.[0]?.message ?? 'Something went wrong. Please try again.'
       setError(message)
