@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import './App.css'
-import { Button } from '@/components/ui/button'
 import { LoginForm } from '@/components/LoginForm'
 import { SignupForm } from '@/components/SignupForm'
 import { SignupVerify } from '@/components/SignupVerify'
 import { LandingPage } from '@/components/LandingPage'
-import { TaskList } from '@/components/TaskList'
+import { AppShell } from '@/components/AppShell'
 import { checkAuth, logout } from '@/lib/auth'
 
 // Wraps every public route (landing, login, signup, verify) so the
@@ -73,71 +72,87 @@ function App() {
     )
   }
 
-  if (authState === 'authenticated') {
-    return (
-      <div className="min-h-screen bg-background p-8">
-        <div className="mx-auto flex max-w-md flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-semibold tracking-tight">FlexMaster</h1>
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground">{username}</span>
-              <Button variant="outline" size="sm" onClick={handleLogout}>
-                Log out
-              </Button>
-            </div>
-          </div>
+  const isAuthenticated = authState === 'authenticated'
 
-          <TaskList />
-        </div>
-      </div>
-    )
-  }
-
-  // anonymous — real routes now, instead of one hardcoded card
+  // A single route tree for both auth states, rather than an early
+  // return that bypasses routing entirely once logged in: the URL bar
+  // now actually reflects where you are (/tasks vs /, /login, …),
+  // refresh and back/forward work, and each route decides for itself
+  // whether the current auth state is allowed there — landing/login/
+  // signup redirect an already-authenticated visitor straight to
+  // /tasks, and /tasks redirects an anonymous one back to /.
   return (
     <Routes>
       {/* Every public route nests under PublicLayout, so the gradient is
           one persistent element shared across all of them, not a copy
           re-painted per page. */}
       <Route element={<PublicLayout />}>
-        <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/"
+          element={isAuthenticated ? <Navigate to="/tasks" replace /> : <LandingPage />}
+        />
         <Route
           path="/login"
           element={
-            <AuthLayout>
-              <LoginForm
-                onLoginSuccess={(data) => {
-                  setUsername(data.username)
-                  setAuthState('authenticated')
-                }}
-              />
-            </AuthLayout>
+            isAuthenticated ? (
+              <Navigate to="/tasks" replace />
+            ) : (
+              <AuthLayout>
+                <LoginForm
+                  onLoginSuccess={(data) => {
+                    setUsername(data.username)
+                    setAuthState('authenticated')
+                  }}
+                />
+              </AuthLayout>
+            )
           }
         />
         <Route
           path="/signup"
           element={
-            <AuthLayout>
-              <SignupForm />
-            </AuthLayout>
+            isAuthenticated ? (
+              <Navigate to="/tasks" replace />
+            ) : (
+              <AuthLayout>
+                <SignupForm />
+              </AuthLayout>
+            )
           }
         />
         <Route
           path="/signup/verify/:token"
           element={
-            <AuthLayout>
-              <SignupVerify
-                onSignupSuccess={(data) => {
-                  setUsername(data.username)
-                  setAuthState('authenticated')
-                }}
-              />
-            </AuthLayout>
+            isAuthenticated ? (
+              <Navigate to="/tasks" replace />
+            ) : (
+              <AuthLayout>
+                <SignupVerify
+                  onSignupSuccess={(data) => {
+                    setUsername(data.username)
+                    setAuthState('authenticated')
+                  }}
+                />
+              </AuthLayout>
+            )
           }
         />
       </Route>
-      {/* Unmatched paths land on the real homepage now, not login. */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+
+      <Route
+        path="/tasks"
+        element={
+          isAuthenticated ? (
+            <AppShell username={username} onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
+      />
+
+      {/* Unmatched paths land on the real homepage (or the app, if
+          already logged in), not a dead end. */}
+      <Route path="*" element={<Navigate to={isAuthenticated ? '/tasks' : '/'} replace />} />
     </Routes>
   )
 }
