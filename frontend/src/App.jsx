@@ -10,6 +10,7 @@ import { Dashboard } from '@/components/Dashboard'
 import { TasksPage } from '@/components/TasksPage'
 import { ComingSoonPage } from '@/components/ComingSoonPage'
 import { Footer } from '@/components/Footer'
+import { AddTaskFab } from '@/components/AddTaskFab'
 import { checkAuth, logout } from '@/lib/auth'
 
 // Wraps every public route (landing, login, signup, verify) so the
@@ -58,6 +59,7 @@ function AuthenticatedLayout({ firstName, onLogout }) {
         <Outlet />
         <Footer />
       </div>
+      <AddTaskFab />
     </div>
   )
 }
