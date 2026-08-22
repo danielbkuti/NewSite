@@ -14,10 +14,11 @@ class TaskModelTestCase(TestCase):
             is_active=True
         )
 
-    def test_subtask_completion_propagates(self):
+    def test_completing_all_subtasks_does_not_auto_complete_task(self):
         """
-        If all subtasks are completed,
-        parent task should be marked completed.
+        Finishing every subtask does not, by itself, mark the parent
+        task completed — that's a separate, explicit action on the task
+        itself (see update_completion_status's docstring).
         """
         task = Task.objects.create(
             user=self.user,
@@ -38,7 +39,60 @@ class TaskModelTestCase(TestCase):
         sub2.save()
 
         task.refresh_from_db()
-        self.assertTrue(task.completed)
+        self.assertFalse(task.completed)
+
+    def test_reopening_a_subtask_reopens_a_completed_task(self):
+        """
+        A task can't validly stay marked completed once one of its
+        subtasks isn't — reopening a subtask reopens the task too.
+        """
+        task = Task.objects.create(
+            user=self.user,
+            name="Parent Task",
+            status="pending",
+            completed=True,
+        )
+        sub1 = SubTask.objects.create(task=task, name="Sub1", completed=True)
+
+        sub1.completed = False
+        sub1.save()
+
+        task.refresh_from_db()
+        self.assertFalse(task.completed)
+
+    def test_completing_task_sets_date_completed(self):
+        """dateCompleted is set automatically when completed flips to
+        True, and cleared again if it's reopened."""
+        task = Task.objects.create(user=self.user, name="Parent Task", status="pending")
+        self.assertIsNone(task.dateCompleted)
+
+        task.completed = True
+        task.save()
+        task.refresh_from_db()
+        self.assertIsNotNone(task.dateCompleted)
+
+        task.completed = False
+        task.save()
+        task.refresh_from_db()
+        self.assertIsNone(task.dateCompleted)
+
+    def test_auto_reopening_via_subtask_clears_date_completed(self):
+        """The update_fields=["completed"] path (subtask-triggered
+        auto-reopen) still clears dateCompleted, not just a plain full
+        save() — this is the exact path that needs dateCompleted
+        appended to update_fields to actually persist the change."""
+        task = Task.objects.create(
+            user=self.user, name="Parent Task", status="pending", completed=True
+        )
+        self.assertIsNotNone(task.dateCompleted)
+
+        sub1 = SubTask.objects.create(task=task, name="Sub1", completed=True)
+        sub1.completed = False
+        sub1.save()  # triggers update_completion_status()'s update_fields save
+
+        task.refresh_from_db()
+        self.assertFalse(task.completed)
+        self.assertIsNone(task.dateCompleted)
 
     def test_days_since_created_property(self):
         """Computed property should return integer."""

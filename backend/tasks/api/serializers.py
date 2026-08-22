@@ -59,8 +59,11 @@ class TaskSerializer(serializers.ModelSerializer):
             "dateCreated",
             "dateDeadline",
             "completed",
+            "dateCompleted",
             "status",
             "days_since_created",
             "subtasks",
         ]
-        read_only_fields = ["dateCreated"]
+        # dateCompleted is only ever set by Task.save() reacting to
+        # `completed` changing — never client-writable.
+        read_only_fields = ["dateCreated", "dateCompleted"]

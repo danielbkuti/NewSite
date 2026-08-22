@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react'
 import { TaskCard } from '@/components/TaskCard'
-import { Button } from '@/components/ui/button'
 import {
   fetchTasks,
   fetchTask,
-  createTask,
   updateTask,
   deleteTask,
   createSubTask,
@@ -16,9 +14,6 @@ export function TaskList() {
   // 'loading' | 'ready' | 'error'
   const [status, setStatus] = useState('loading')
   const [tasks, setTasks] = useState([])
-  const [newTaskName, setNewTaskName] = useState('')
-  const [addError, setAddError] = useState(null)
-  const [adding, setAdding] = useState(false)
 
   useEffect(() => {
     fetchTasks()
@@ -30,13 +25,18 @@ export function TaskList() {
   }, [])
 
   // Optimistic: flip the checkbox immediately rather than waiting on the
-  // PATCH round-trip, revert only if the request actually fails.
+  // PATCH round-trip, revert only if the request actually fails. Once
+  // it succeeds, merges the server's response back in rather than
+  // trusting the optimistic patch alone — completing a task also sets
+  // dateCompleted server-side, which the client has no way to know in
+  // advance.
   async function handleToggle(task, checked) {
     setTasks((current) =>
       current.map((t) => (t.id === task.id ? { ...t, completed: checked } : t))
     )
     try {
-      await updateTask(task.id, { completed: checked })
+      const updated = await updateTask(task.id, { completed: checked })
+      setTasks((current) => current.map((t) => (t.id === task.id ? { ...t, ...updated } : t)))
     } catch {
       setTasks((current) =>
         current.map((t) => (t.id === task.id ? { ...t, completed: task.completed } : t))
@@ -103,27 +103,6 @@ export function TaskList() {
     await refreshTask(task.id)
   }
 
-  async function handleAdd(event) {
-    event.preventDefault()
-    setAddError(null)
-    setAdding(true)
-
-    try {
-      // The API hands back the full created object (id, dateCreated,
-      // everything) — no need to re-fetch the whole list for it.
-      const task = await createTask({ name: newTaskName })
-      setTasks((current) => [task, ...current])
-      setNewTaskName('')
-    } catch (err) {
-      // DRF's default validation error shape: { field: ["message", ...] }
-      // — plain strings, unlike the {message, code} objects our own
-      // Django-forms-based auth endpoints return.
-      setAddError(err.data?.name?.[0] ?? 'Could not add that task. Try again.')
-    } finally {
-      setAdding(false)
-    }
-  }
-
   if (status === 'loading') {
     return <p className="text-sm text-muted-foreground">Loading tasks…</p>
   }
@@ -134,38 +113,43 @@ export function TaskList() {
     )
   }
 
+  const activeTasks = tasks.filter((t) => !t.completed)
+  const completedTasks = tasks.filter((t) => t.completed)
+
+  function renderCard(task) {
+    return (
+      <TaskCard
+        key={task.id}
+        task={task}
+        onToggleComplete={handleToggle}
+        onSetDeadline={handleSetDeadline}
+        onDelete={handleDelete}
+        onAddSubtask={handleAddSubtask}
+        onToggleSubtask={handleToggleSubtask}
+        onDeleteSubtask={handleDeleteSubtask}
+      />
+    )
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <form onSubmit={handleAdd} className="flex gap-2">
-        <input
-          value={newTaskName}
-          onChange={(e) => setNewTaskName(e.target.value)}
-          placeholder="Add a task…"
-          className="flex-1 rounded-md border border-input bg-transparent px-3 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          required
-        />
-        <Button type="submit" disabled={adding}>
-          {adding ? 'Adding…' : 'Add'}
-        </Button>
-      </form>
-
-      {addError && <p className="text-xs text-destructive">{addError}</p>}
-
       {tasks.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No tasks yet — add one above.</p>
+        <p className="text-sm text-muted-foreground">
+          No tasks yet — add one with the + button in the corner.
+        </p>
       ) : (
-        tasks.map((task) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            onToggleComplete={handleToggle}
-            onSetDeadline={handleSetDeadline}
-            onDelete={handleDelete}
-            onAddSubtask={handleAddSubtask}
-            onToggleSubtask={handleToggleSubtask}
-            onDeleteSubtask={handleDeleteSubtask}
-          />
-        ))
+        <>
+          {activeTasks.map(renderCard)}
+
+          {completedTasks.length > 0 && (
+            <div className="mt-6 flex flex-col gap-4">
+              <h2 className="text-sm font-semibold text-muted-foreground">
+                Completed ({completedTasks.length})
+              </h2>
+              {completedTasks.map(renderCard)}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

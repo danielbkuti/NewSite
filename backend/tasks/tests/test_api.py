@@ -143,9 +143,9 @@ class SubTaskAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(SubTask.objects.count(), 0)
 
-    def test_completing_subtask_propagates_to_parent(self):
-        """Same propagation behavior as test_models, but driven through
-        the actual API path instead of the ORM directly."""
+    def test_completing_only_subtask_does_not_complete_parent(self):
+        """Same non-propagation behavior as test_models, but driven
+        through the actual API path instead of the ORM directly."""
         self.authenticate(self.user1)
 
         create_response = self.client.post(self.url, {
@@ -158,4 +158,4 @@ class SubTaskAPITestCase(APITestCase):
         self.client.patch(f"{self.url}{subtask_id}/", {"completed": True})
 
         self.task1.refresh_from_db()
-        self.assertTrue(self.task1.completed)
+        self.assertFalse(self.task1.completed)
