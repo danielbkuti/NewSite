@@ -9,6 +9,7 @@ import { NavBar } from '@/components/NavBar'
 import { Dashboard } from '@/components/Dashboard'
 import { TasksPage } from '@/components/TasksPage'
 import { TaskDetailPage } from '@/components/TaskDetailPage'
+import { ProgressPage } from '@/components/ProgressPage'
 import { ComingSoonPage } from '@/components/ComingSoonPage'
 import { Footer } from '@/components/Footer'
 import { AddTaskFab } from '@/components/AddTaskFab'
@@ -180,7 +181,7 @@ function App() {
         <Route path="/tasks/:id" element={<TaskDetailPage />} />
         <Route path="/goals" element={<ComingSoonPage title="Goals" />} />
         <Route path="/calendar" element={<ComingSoonPage title="Calendar" />} />
-        <Route path="/progress" element={<ComingSoonPage title="Progress" />} />
+        <Route path="/progress" element={<ProgressPage />} />
       </Route>
 
       {/* Unmatched paths land on the real homepage (or the dashboard, if

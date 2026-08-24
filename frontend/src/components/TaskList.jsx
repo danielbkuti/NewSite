@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
-import { TaskCard } from '@/components/TaskCard'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { TaskCard, SubtaskStackCard } from '@/components/TaskCard'
+import { OverdueGateModal, collectOverdueItems } from '@/components/OverdueGateModal'
 import {
   fetchTasks,
   fetchTask,
@@ -9,6 +11,13 @@ import {
   updateSubTask,
   deleteSubTask,
 } from '@/lib/tasks'
+import { UPCOMING_WINDOW_MS } from '@/lib/utils'
+
+// How many completed tasks show inline before the list defers to the
+// Progress page instead of just growing forever — same spirit as the
+// subtask cascade preview on each card, which caps at 3 for the same
+// reason.
+const COMPLETED_PREVIEW_COUNT = 3
 
 // How long a just-completed task stays put (playing its confetti burst)
 // before it's actually allowed to drop into the Completed section.
@@ -25,6 +34,12 @@ export function TaskList() {
   // clears, so completing a task doesn't just instantly teleport it to
   // the bottom of the page.
   const [celebratingIds, setCelebratingIds] = useState(() => new Set())
+  const [showOverdueGate, setShowOverdueGate] = useState(false)
+  // Guards the overdue gate to a one-time check per page load — without
+  // it, every subsequent task mutation (checking something off, adding
+  // a subtask) would re-fetch `tasks` and re-open the modal the user
+  // just dismissed.
+  const overdueCheckedRef = useRef(false)
 
   useEffect(() => {
     fetchTasks()
@@ -34,6 +49,12 @@ export function TaskList() {
       })
       .catch(() => setStatus('error'))
   }, [])
+
+  useEffect(() => {
+    if (status !== 'ready' || overdueCheckedRef.current) return
+    overdueCheckedRef.current = true
+    if (collectOverdueItems(tasks).length > 0) setShowOverdueGate(true)
+  }, [status, tasks])
 
   // Optimistic: flip the checkbox immediately rather than waiting on the
   // PATCH round-trip, revert only if the request actually fails. Once
@@ -136,6 +157,20 @@ export function TaskList() {
     await refreshTask(task.id)
   }
 
+  // Where a promoted subtask's "Part of ..." tag sends you — not a
+  // navigation, just scrolls the full task's own card into view and
+  // gives it a brief highlight so it's obvious which one it meant.
+  // Direct DOM manipulation rather than React state, same call as the
+  // task detail page's FLIP reorder animation: a purely transient
+  // visual effect that doesn't need to survive a re-render.
+  function handleJumpToTask(taskId) {
+    const el = document.getElementById(`task-${taskId}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('ring-2', 'ring-sky-400')
+    window.setTimeout(() => el.classList.remove('ring-2', 'ring-sky-400'), 1200)
+  }
+
   if (status === 'loading') {
     return <p className="text-sm text-muted-foreground">Loading tasks…</p>
   }
@@ -150,7 +185,14 @@ export function TaskList() {
   // already `completed` server-side — it only actually moves down once
   // its timer clears.
   const activeTasks = tasks.filter((t) => !t.completed || celebratingIds.has(t.id))
-  const completedTasks = tasks.filter((t) => t.completed && !celebratingIds.has(t.id))
+  // Most recently completed first, same ordering rule as the task
+  // detail page's completed-subtask group — only the freshest few are
+  // worth showing inline, the rest live on /progress.
+  const completedTasks = tasks
+    .filter((t) => t.completed && !celebratingIds.has(t.id))
+    .sort((a, b) => new Date(b.dateCompleted) - new Date(a.dateCompleted))
+  const visibleCompletedTasks = completedTasks.slice(0, COMPLETED_PREVIEW_COUNT)
+  const hiddenCompletedCount = completedTasks.length - visibleCompletedTasks.length
 
   function renderCard(task) {
     return (
@@ -169,22 +211,102 @@ export function TaskList() {
     )
   }
 
+  // Default sort, until a real sort/filter UI exists: every active
+  // task always gets its own entry at its own deadline, and every
+  // dated, incomplete subtask of every task *also* gets its own entry
+  // at its own deadline — not just the single soonest one per task.
+  // Each holds exactly as much priority in the sort as any standalone
+  // task; a task with three subtasks due before it can show all three
+  // ahead of it, each also still shows up bundled in its own task's
+  // normal cascade preview lower down. Undated subtasks never get
+  // promoted this way; they stay bundled in the task's normal preview
+  // only.
+  const sortEntries = activeTasks.flatMap((task) => {
+    const entries = [{ type: 'task', task, date: task.dateDeadline }]
+    const datedIncompleteSubtasks = task.subtasks.filter((s) => !s.completed && s.dateDeadline)
+    for (const subtask of datedIncompleteSubtasks) {
+      entries.push({ type: 'subtask', task, subtask, date: subtask.dateDeadline })
+    }
+    return entries
+  })
+
+  // Three buckets: due this week (includes overdue — an overdue date
+  // is even sooner than "within a week"), no deadline, then later.
+  // Soonest first within the dated buckets.
+  const now = Date.now()
+  const dueSoon = []
+  const undated = []
+  const later = []
+  for (const entry of sortEntries) {
+    if (!entry.date) undated.push(entry)
+    else if (new Date(entry.date).getTime() - now <= UPCOMING_WINDOW_MS) dueSoon.push(entry)
+    else later.push(entry)
+  }
+  dueSoon.sort((a, b) => new Date(a.date) - new Date(b.date))
+  later.sort((a, b) => new Date(a.date) - new Date(b.date))
+
+  function renderEntry(entry) {
+    if (entry.type === 'task') return renderCard(entry.task)
+    const { task, subtask } = entry
+    return (
+      <SubtaskStackCard
+        key={`subtask-${subtask.id}`}
+        subtask={subtask}
+        partOf={{
+          label: `Part of "${task.name}"`,
+          onClick: () => handleJumpToTask(task.id),
+        }}
+        onToggleComplete={(checked) => handleToggleSubtask(task, subtask, checked)}
+        onSetDeadline={(dateDeadline) => handleSetSubtaskDeadline(task, subtask, dateDeadline)}
+      />
+    )
+  }
+
+  function renderBucket(label, entries) {
+    if (entries.length === 0) return null
+    return (
+      <div key={label} className="flex flex-col gap-4">
+        <h2 className="text-sm font-semibold text-muted-foreground">{label}</h2>
+        {entries.map(renderEntry)}
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
+      {showOverdueGate && (
+        <OverdueGateModal
+          overdueItems={collectOverdueItems(tasks)}
+          onDismiss={() => setShowOverdueGate(false)}
+        />
+      )}
+
       {tasks.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No tasks yet — add one with the + button in the corner.
         </p>
       ) : (
         <>
-          {activeTasks.map(renderCard)}
+          {renderBucket('Due this week', dueSoon)}
+          {renderBucket('No deadline', undated)}
+          {renderBucket('Later', later)}
 
           {completedTasks.length > 0 && (
-            <div className="mt-6 flex flex-col gap-4">
-              <h2 className="text-sm font-semibold text-muted-foreground">
-                Completed ({completedTasks.length})
-              </h2>
-              {completedTasks.map(renderCard)}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-muted-foreground">
+                  Completed ({completedTasks.length})
+                </h2>
+                {hiddenCompletedCount > 0 && (
+                  <Link
+                    to="/progress"
+                    className="text-xs font-medium text-sky-600 hover:underline"
+                  >
+                    View all completed →
+                  </Link>
+                )}
+              </div>
+              {visibleCompletedTasks.map(renderCard)}
             </div>
           )}
         </>

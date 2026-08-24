@@ -2,8 +2,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
-import { fetchTask, updateSubTask } from '@/lib/tasks'
+import { fetchTask, updateTask, createSubTask, updateSubTask } from '@/lib/tasks'
 import { cn, formatDeadline, calculateProgress, isDeadlineUrgent } from '@/lib/utils'
+import { useDeadlineStatus } from '@/hooks/useDeadlineStatus'
+import { DeadlineEditor } from '@/components/DeadlineEditor'
+import { AddSubtaskForm } from '@/components/AddSubtaskForm'
 
 const PROGRESS_GRADIENT = 'bg-gradient-to-r from-[#e0c3fc] via-[#7c5fb0] to-[#8ec5fc]'
 // How long a just-checked subtask stays in place (checkbox filled
@@ -15,6 +18,10 @@ const SUBTASK_CELEBRATION_MS = 1400
 // fading — it's a one-time heads-up on opening the page, not a
 // persistent banner.
 const DEADLINE_HINT_MS = 5000
+// Same cap as the main task list's Completed section — only the
+// freshest few completed subtasks show here, the rest live on
+// /progress alongside every other completed task/subtask.
+const COMPLETED_SUBTASK_PREVIEW_COUNT = 3
 
 // The "View more" destination from a task card's subtask stack — the
 // first real single-task view. Title, progress (or a "Complete" bubble
@@ -34,6 +41,15 @@ export function TaskDetailPage() {
   const [showDeadlineHint, setShowDeadlineHint] = useState(false)
   const [deadlineHintMounted, setDeadlineHintMounted] = useState(false)
   const hintCheckedRef = useRef(false)
+  const [editingDeadline, setEditingDeadline] = useState(false)
+  const [addingSubtask, setAddingSubtask] = useState(false)
+  // Safe to call unconditionally with an as-yet-null task (dateDeadline
+  // undefined just means "no deadline", same as the loaded case) —
+  // has to run before the loading/error early returns below since
+  // hooks can't be conditional. `liveOverdue` matches the subtask
+  // rows on this page: this is the one place the app shows a genuinely
+  // ticking "how overdue" duration, in days once it runs past 24h.
+  const deadlineStatus = useDeadlineStatus(task?.dateDeadline, task?.completed, { liveOverdue: true })
 
   useEffect(() => {
     setStatus('loading')
@@ -78,6 +94,15 @@ export function TaskDetailPage() {
     return () => clearTimeout(timer)
   }, [showDeadlineHint])
 
+  // Same "create then re-fetch" pattern as the toggle handler below —
+  // this page had no way to add a subtask at all before, only the
+  // /tasks list's cascade could.
+  async function handleAddSubtask(name) {
+    await createSubTask({ task: id, name })
+    const fresh = await fetchTask(id)
+    setTask(fresh)
+  }
+
   async function handleToggleSubtask(subtask, checked) {
     setBusyIds((current) => new Set(current).add(subtask.id))
     if (checked) {
@@ -110,6 +135,16 @@ export function TaskDetailPage() {
     }
   }
 
+  // Same shape as TaskCard's own deadline editor — this page just
+  // couldn't edit the deadline at all before, only display it read-only
+  // via the list. Merges the server's response into local state rather
+  // than assuming the optimistic input round-trips unchanged.
+  async function handleDeadlineSave(dateDeadline) {
+    const updated = await updateTask(id, { dateDeadline })
+    setTask((current) => ({ ...current, ...updated }))
+    setEditingDeadline(false)
+  }
+
   if (status === 'loading') {
     return (
       <div className="mx-auto max-w-3xl px-8 py-8">
@@ -135,14 +170,18 @@ export function TaskDetailPage() {
   // relative order. Completed ones follow as their own group, ordered
   // by dateCompleted descending — the most recently finished one lands
   // right at the top of that group (i.e. right after the open ones),
-  // not at the very bottom of the page.
-  const sortedSubtasks = [...task.subtasks].sort((a, b) => {
-    const aDone = a.completed && !celebratingIds.has(a.id)
-    const bDone = b.completed && !celebratingIds.has(b.id)
-    if (aDone !== bDone) return aDone ? 1 : -1
-    if (aDone && bDone) return new Date(b.dateCompleted) - new Date(a.dateCompleted)
-    return 0
-  })
+  // not at the very bottom of the page. Only the freshest few of those
+  // render inline; the rest are on /progress, same cap as the main
+  // task list's Completed section.
+  const openSubtasks = task.subtasks.filter(
+    (s) => !s.completed || celebratingIds.has(s.id)
+  )
+  const completedSubtasks = task.subtasks
+    .filter((s) => s.completed && !celebratingIds.has(s.id))
+    .sort((a, b) => new Date(b.dateCompleted) - new Date(a.dateCompleted))
+  const visibleCompletedSubtasks = completedSubtasks.slice(0, COMPLETED_SUBTASK_PREVIEW_COUNT)
+  const hiddenCompletedSubtaskCount = completedSubtasks.length - visibleCompletedSubtasks.length
+  const sortedSubtasks = [...openSubtasks, ...visibleCompletedSubtasks]
 
   return (
     <div className="mx-auto max-w-3xl px-8 py-8">
@@ -180,34 +219,96 @@ export function TaskDetailPage() {
         </div>
       </div>
 
-      <SubtaskFlipList subtasks={sortedSubtasks}>
-        {(subtask) => {
-          const checked = subtask.completed || celebratingIds.has(subtask.id)
-          return (
-            <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm transition-colors duration-300">
-              <Checkbox
-                checked={checked}
-                onCheckedChange={(value) => handleToggleSubtask(subtask, value)}
-                disabled={busyIds.has(subtask.id)}
-                className="shrink-0 data-checked:border-emerald-500 data-checked:bg-emerald-500"
-              />
-              <span
-                className={cn(
-                  'flex-1 truncate transition-colors duration-300',
-                  checked && 'text-muted-foreground line-through'
-                )}
-              >
-                {subtask.name}
-              </span>
-              {subtask.dateDeadline && (
-                <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                  Due {formatDeadline(subtask.dateDeadline)}
-                </span>
-              )}
-            </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">Created {formatDeadline(task.dateCreated)}</p>
+
+        {task.completed ? (
+          task.dateDeadline && (
+            <p className="text-xs text-muted-foreground">
+              Deadline was {formatDeadline(task.dateDeadline)}
+            </p>
           )
-        }}
-      </SubtaskFlipList>
+        ) : editingDeadline ? (
+          <div className="relative">
+            <DeadlineEditor
+              value={task.dateDeadline}
+              onSave={handleDeadlineSave}
+              onCancel={() => setEditingDeadline(false)}
+              minDayOffset={0}
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col items-end gap-0.5">
+            <button
+              type="button"
+              onClick={() => setEditingDeadline(true)}
+              className={cn(
+                'rounded-full px-3 py-1 text-xs font-medium tabular-nums transition-colors',
+                deadlineStatus.isOverdue
+                  ? 'bg-red-700 text-white hover:bg-red-800'
+                  : deadlineStatus.isUrgent
+                    ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                    : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+              )}
+            >
+              {deadlineStatus.isOverdue
+                ? 'Overdue'
+                : deadlineStatus.isUrgent
+                  ? `Due in: ${deadlineStatus.countdownDisplay}`
+                  : task.dateDeadline
+                    ? `Due ${formatDeadline(task.dateDeadline)}`
+                    : 'Set deadline'}
+            </button>
+            {deadlineStatus.isOverdue && (
+              <span className="text-[11px] font-medium text-red-700 tabular-nums">
+                Due: {deadlineStatus.overdueDisplay} ago
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {task.subtasks.length === 0 ? (
+        <div className="mt-8">
+          {addingSubtask ? (
+            <AddSubtaskForm onAdd={handleAddSubtask} />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Want to break this down into smaller chunks?{' '}
+              <button
+                type="button"
+                onClick={() => setAddingSubtask(true)}
+                className="font-medium text-sky-600 hover:text-sky-700 hover:underline"
+              >
+                Add subtasks
+              </button>
+            </p>
+          )}
+        </div>
+      ) : (
+        <SubtaskFlipList subtasks={sortedSubtasks}>
+          {(subtask) => {
+            const checked = subtask.completed || celebratingIds.has(subtask.id)
+            return (
+              <SubtaskDetailRow
+                subtask={subtask}
+                checked={checked}
+                busy={busyIds.has(subtask.id)}
+                onToggle={(value) => handleToggleSubtask(subtask, value)}
+              />
+            )
+          }}
+        </SubtaskFlipList>
+      )}
+
+      {hiddenCompletedSubtaskCount > 0 && (
+        <Link
+          to="/progress"
+          className="mt-3 inline-block text-xs font-medium text-sky-600 hover:underline"
+        >
+          View {hiddenCompletedSubtaskCount} more completed →
+        </Link>
+      )}
 
       {deadlineHintMounted && (
         <div
@@ -219,6 +320,54 @@ export function TaskDetailPage() {
           Something here is due soon — consider extending the deadline.
         </div>
       )}
+    </div>
+  )
+}
+
+// One subtask row. Its own component (rather than inline in the
+// SubtaskFlipList callback) because it needs a live-ticking
+// useDeadlineStatus for the overdue case — that's a hook call, and the
+// list it's rendered from can grow or shrink, so it has to live inside
+// something that mounts/unmounts per-item rather than a bare loop
+// inside TaskDetailPage's own render. This is the one place in the app
+// that opts into `liveOverdue`: unlike the list cards (a static
+// "Overdue" badge + the plain due date is enough there), the detail
+// page is where someone's actually looking at one task, so the "how
+// overdue" duration ticks for real, in days once it runs past 24h.
+function SubtaskDetailRow({ subtask, checked, busy, onToggle }) {
+  const status = useDeadlineStatus(subtask.dateDeadline, checked, { liveOverdue: true })
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm transition-colors duration-300">
+      <Checkbox
+        checked={checked}
+        onCheckedChange={onToggle}
+        disabled={busy}
+        className="shrink-0 data-checked:border-emerald-500 data-checked:bg-emerald-500"
+      />
+      <span
+        className={cn(
+          'flex-1 truncate transition-colors duration-300',
+          checked && 'text-muted-foreground line-through'
+        )}
+      >
+        {subtask.name}
+      </span>
+      {subtask.dateDeadline &&
+        (status.isOverdue ? (
+          <div className="flex shrink-0 flex-col items-end gap-0.5">
+            <span className="rounded-full bg-red-700 px-2 py-0.5 text-xs font-medium text-white">
+              Overdue
+            </span>
+            <span className="text-[11px] font-medium text-red-700 tabular-nums">
+              Due: {status.overdueDisplay} ago
+            </span>
+          </div>
+        ) : (
+          <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+            Due {formatDeadline(subtask.dateDeadline)}
+          </span>
+        ))}
     </div>
   )
 }

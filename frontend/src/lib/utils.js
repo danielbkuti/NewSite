@@ -52,6 +52,13 @@ export function isDeadlineUrgent(iso, completed) {
   return remaining > 0 && remaining <= URGENT_WINDOW_MS;
 }
 
+// The task list's default sort buckets active items into "due this
+// week" (anything at or before now + 7 days — overdue included, since
+// an overdue date is even sooner than that), "no deadline", then
+// "later". A dedicated sort/filter UI is planned, but this is the
+// baseline ordering until it exists.
+export const UPCOMING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 // Subtasks collectively count for 80% of the bar; the last 20% only
 // closes up when the task itself is explicitly checked off complete —
 // finishing every subtask does not do this automatically (see
