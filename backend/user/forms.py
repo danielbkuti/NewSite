@@ -81,3 +81,36 @@ class SignupCompleteForm(forms.Form):
         if password1 and password2 and password1 != password2:
             raise forms.ValidationError("The two password fields didn't match.")
         return password2
+
+
+class PasswordResetRequestForm(forms.Form):
+    """Step 1 of forgot-password — just an email, same shape as signup's."""
+    email = forms.EmailField()
+
+
+class PasswordResetConfirmForm(forms.Form):
+    """
+    Sets a new password for an already-identified, already-token-
+    verified user — resolving the uid and checking the token both
+    happen at the view level before this form ever runs, so `user` is
+    passed in already known-good rather than looked up here.
+    """
+    password1 = forms.CharField()
+    password2 = forms.CharField()
+
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+
+    def clean_password1(self):
+        password1 = self.cleaned_data.get("password1")
+        if password1 and self.user is not None:
+            validate_password(password1, user=self.user)
+        return password1
+
+    def clean_password2(self):
+        password1 = self.cleaned_data.get("password1")
+        password2 = self.cleaned_data.get("password2")
+        if password1 and password2 and password1 != password2:
+            raise forms.ValidationError("The two password fields didn't match.")
+        return password2

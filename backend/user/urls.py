@@ -9,6 +9,8 @@ from user.api_views import (
     signup_pending_api,
     signup_complete_api,
     check_email_exists,
+    password_reset_request_api,
+    password_reset_confirm_api,
 )
 
 urlpatterns = [
@@ -25,6 +27,12 @@ urlpatterns = [
     path("api/signup/pending/<str:token>/", signup_pending_api, name="signup_pending_api"),
     path("api/signup/complete/<str:token>/", signup_complete_api, name="signup_complete_api"),
     path("api/email-exists/", check_email_exists, name="check_email_exists"),
+    path("api/password-reset/request/", password_reset_request_api, name="password_reset_request_api"),
+    path(
+        "api/password-reset/confirm/<uidb64>/<token>/",
+        password_reset_confirm_api,
+        name="password_reset_confirm_api",
+    ),
     #path("", include("allauth.urls")),
 
 ]

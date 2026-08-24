@@ -4,6 +4,8 @@ import './App.css'
 import { LoginForm } from '@/components/LoginForm'
 import { SignupForm } from '@/components/SignupForm'
 import { SignupVerify } from '@/components/SignupVerify'
+import { ForgotPasswordForm } from '@/components/ForgotPasswordForm'
+import { ResetPasswordForm } from '@/components/ResetPasswordForm'
 import { LandingPage } from '@/components/LandingPage'
 import { NavBar } from '@/components/NavBar'
 import { Dashboard } from '@/components/Dashboard'
@@ -158,6 +160,30 @@ function App() {
             ) : (
               <AuthLayout>
                 <SignupVerify onSignupSuccess={handleAuthSuccess} />
+              </AuthLayout>
+            )
+          }
+        />
+        <Route
+          path="/forgot-password"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/home" replace />
+            ) : (
+              <AuthLayout>
+                <ForgotPasswordForm />
+              </AuthLayout>
+            )
+          }
+        />
+        <Route
+          path="/reset-password/:uidb64/:token"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/home" replace />
+            ) : (
+              <AuthLayout>
+                <ResetPasswordForm onResetSuccess={handleAuthSuccess} />
               </AuthLayout>
             )
           }

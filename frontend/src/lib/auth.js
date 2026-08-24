@@ -49,3 +49,23 @@ export function completeSignup(token, { password1, password2 }) {
 export function checkEmailExists(email) {
   return apiFetch(`/user/api/email-exists/?email=${encodeURIComponent(email)}`)
 }
+
+// --- Forgot password ---
+
+export function requestPasswordReset(email) {
+  return apiFetch('/user/api/password-reset/request/', {
+    method: 'POST',
+    body: { email },
+  })
+}
+
+export function checkPasswordResetLink(uidb64, token) {
+  return apiFetch(`/user/api/password-reset/confirm/${uidb64}/${token}/`)
+}
+
+export function confirmPasswordReset(uidb64, token, { password1, password2 }) {
+  return apiFetch(`/user/api/password-reset/confirm/${uidb64}/${token}/`, {
+    method: 'POST',
+    body: { password1, password2 },
+  })
+}

@@ -30,9 +30,14 @@ export function LoginForm({ onLoginSuccess }) {
       const data = await login(username, password)
       onLoginSuccess(data)
     } catch (err) {
-      // Our login_api view puts form errors under err.data.errors.__all__
+      // Our login_api view puts form errors under err.data.errors.__all__.
+      // A 429 (too many failed attempts — see login_api's rate limit)
+      // carries its own message under err.data.detail instead, since
+      // there's no form at that point to attach a field error to.
       const message =
-        err.data?.errors?.__all__?.[0]?.message ?? 'Login failed. Please try again.'
+        err.status === 429
+          ? (err.data?.detail ?? 'Too many failed login attempts. Please wait a few minutes and try again.')
+          : (err.data?.errors?.__all__?.[0]?.message ?? 'Login failed. Please try again.')
       setError(message)
     } finally {
       setSubmitting(false)
@@ -132,6 +137,13 @@ export function LoginForm({ onLoginSuccess }) {
               </button>
             </div>
           </div>
+
+          <Link
+            to="/forgot-password"
+            className="self-end text-xs font-medium text-sky-600 hover:underline"
+          >
+            Forgot password?
+          </Link>
 
           {/* 5. Error directly under the fields, small + red */}
           {error && <p className="text-xs text-destructive">{error}</p>}
