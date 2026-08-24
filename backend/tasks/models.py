@@ -2,6 +2,34 @@ from django.db import models, transaction
 from django.utils.timezone import now
 
 
+def _sync_date_completed(instance, model_cls, kwargs):
+    """
+    Shared by Task.save() and SubTask.save(): sets dateCompleted to now()
+    the moment `completed` actually flips to True, clears it back to
+    None the moment it flips back to False — never touched any other
+    time. Mutates `kwargs` in place to append "dateCompleted" to
+    update_fields when the caller passed one (e.g.
+    Task.update_completion_status() saves with
+    update_fields=["completed"]); without that, Django would silently
+    drop the dateCompleted change instead of persisting it.
+    """
+    update_fields = kwargs.get("update_fields")
+    previous_completed = None
+    if instance.pk:
+        previous_completed = (
+            model_cls.objects.filter(pk=instance.pk).values_list("completed", flat=True).first()
+        )
+
+    completed_changed = (
+        previous_completed is not None and previous_completed != instance.completed
+    ) or (previous_completed is None and instance.completed)
+
+    if completed_changed:
+        instance.dateCompleted = now() if instance.completed else None
+        if update_fields is not None:
+            kwargs["update_fields"] = list(update_fields) + ["dateCompleted"]
+
+
 # Create your models here.
 class Task(models.Model):
     user = models.ForeignKey("user.CustomUser", related_name="tasks", on_delete=models.CASCADE)
@@ -27,31 +55,8 @@ class Task(models.Model):
     )
 
     def save(self, *args, **kwargs):
-        """
-        Keeps dateCompleted in sync with `completed` any time it actually
-        changes value — set to now() on pending -> completed, cleared
-        back to None on completed -> pending. Works whether the caller
-        passes update_fields or not: update_completion_status() saves
-        with update_fields=["completed"], and without appending
-        "dateCompleted" here too, Django would silently drop that change
-        instead of persisting it.
-        """
-        update_fields = kwargs.get("update_fields")
-        previous_completed = None
-        if self.pk:
-            previous_completed = (
-                Task.objects.filter(pk=self.pk).values_list("completed", flat=True).first()
-            )
-
-        completed_changed = (
-            previous_completed is not None and previous_completed != self.completed
-        ) or (previous_completed is None and self.completed)
-
-        if completed_changed:
-            self.dateCompleted = now() if self.completed else None
-            if update_fields is not None:
-                kwargs["update_fields"] = list(update_fields) + ["dateCompleted"]
-
+        """See _sync_date_completed."""
+        _sync_date_completed(self, Task, kwargs)
         super().save(*args, **kwargs)
 
     @property
@@ -111,12 +116,19 @@ class SubTask(models.Model):
     dateCreated = models.DateTimeField(auto_now_add=True)
     dateDeadline = models.DateTimeField(null=True, blank=True)
     completed = models.BooleanField(default=False)
+    # Same rules as Task.dateCompleted — set the moment `completed`
+    # flips to True, cleared the moment it flips back. Lets the frontend
+    # sort completed subtasks by when each was actually finished
+    # (most-recent first) instead of losing that ordering entirely.
+    dateCompleted = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         """
-        After saving a subtask, ensure the parent task completion state
-        stays synchronized.
+        Keeps dateCompleted in sync (see _sync_date_completed), then
+        ensures the parent task's own completion state stays
+        synchronized.
         """
+        _sync_date_completed(self, SubTask, kwargs)
         with transaction.atomic():
             super().save(*args, **kwargs)
             self.task.update_completion_status()
