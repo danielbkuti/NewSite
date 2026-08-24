@@ -23,10 +23,14 @@ export async function fetchTasks() {
   return { results, count }
 }
 
-export function createTask({ name, status = 'pending', completed = false }) {
+export function createTask({ name, description, dateDeadline, status = 'pending', completed = false }) {
   return apiFetch('/api/tasks/', {
     method: 'POST',
-    body: { name, status, completed },
+    // description/dateDeadline land as `undefined` when the caller
+    // doesn't pass them (e.g. the FAB's quick options) — JSON.stringify
+    // drops undefined keys entirely, so the request just omits them
+    // rather than sending an explicit null.
+    body: { name, description, dateDeadline, status, completed },
   })
 }
 

@@ -10,6 +10,7 @@ import { LandingPage } from '@/components/LandingPage'
 import { NavBar } from '@/components/NavBar'
 import { Dashboard } from '@/components/Dashboard'
 import { TasksPage } from '@/components/TasksPage'
+import { NewTaskPage } from '@/components/NewTaskPage'
 import { TaskDetailPage } from '@/components/TaskDetailPage'
 import { ProgressPage } from '@/components/ProgressPage'
 import { ComingSoonPage } from '@/components/ComingSoonPage'
@@ -204,6 +205,7 @@ function App() {
       >
         <Route path="/home" element={<Dashboard firstName={firstName} username={username} />} />
         <Route path="/tasks" element={<TasksPage />} />
+        <Route path="/tasks/new" element={<NewTaskPage />} />
         <Route path="/tasks/:id" element={<TaskDetailPage />} />
         <Route path="/goals" element={<ComingSoonPage title="Goals" />} />
         <Route path="/calendar" element={<ComingSoonPage title="Calendar" />} />
