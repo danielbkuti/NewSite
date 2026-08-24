@@ -1,10 +1,26 @@
 import { apiFetch } from './api'
 
-// GET /api/tasks/ is paginated server-side (PAGE_SIZE=10) — this fetches
-// just page 1 for now. Real pagination UI is a later addition, not an
-// oversight.
-export function fetchTasks() {
-  return apiFetch('/api/tasks/')
+// GET /api/tasks/ is paginated server-side (PAGE_SIZE=10). The app has no
+// "page 2" concept anywhere in its UI — /tasks shows one continuous list
+// split into Active/Completed sections, and the dashboard just wants a
+// preview slice — so rather than bolt on page-number controls, this walks
+// every page and hands callers the full combined result set. `next` comes
+// back as an absolute URL (DRF's PageNumberPagination builds it from the
+// request); strip the origin so it can be replayed through apiFetch, which
+// prepends API_BASE_URL itself.
+export async function fetchTasks() {
+  let path = '/api/tasks/'
+  let results = []
+  let count = 0
+
+  while (path) {
+    const data = await apiFetch(path)
+    results = results.concat(data.results)
+    count = data.count
+    path = data.next ? data.next.replace(/^https?:\/\/[^/]+/, '') : null
+  }
+
+  return { results, count }
 }
 
 export function createTask({ name, status = 'pending', completed = false }) {
