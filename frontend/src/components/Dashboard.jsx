@@ -4,6 +4,8 @@ import { SquarePlus, Target, CalendarDays, Sparkles, Clock } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import { TaskFeaturePreview } from '@/components/TaskFeaturePreview'
+import { cn } from '@/lib/utils'
 import { fetchTasks, updateTask, updateSubTask } from '@/lib/tasks'
 
 function formatDeadline(iso) {
@@ -19,15 +21,31 @@ function formatDeadline(iso) {
 // message. `accent` drives both the icon badge color and the soft
 // blurred glow tucked behind it — each card gets its own color so the
 // row doesn't read as three identical boxes.
-function ActionCard({ to, icon: Icon, title, description, accent }) {
+function ActionCard({ to, icon: Icon, title, description, accent, preview }) {
+  // Local hover state, separate from the `group`/`group-hover` CSS
+  // already driving this card's own lift/glow/icon-scale — those stay
+  // pure CSS, but the preview needs real JS state to drive its scene
+  // timer, so it gets its own onMouseEnter/Leave.
+  const [hovered, setHovered] = useState(false)
+
   return (
-    <Link to={to} className="group block">
-      <Card className="relative aspect-square p-5 shadow-sm transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
+    <Link
+      to={to}
+      className="group block"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <Card className="relative aspect-square overflow-hidden p-5 shadow-sm transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
         <div
           className="pointer-events-none absolute -top-8 -right-8 size-28 rounded-full opacity-20 blur-2xl transition-opacity duration-200 group-hover:opacity-35"
           style={{ backgroundColor: accent }}
         />
-        <div className="relative flex h-full flex-col justify-between">
+        <div
+          className={cn(
+            'relative flex h-full flex-col justify-between transition-opacity duration-200',
+            preview && hovered && 'opacity-0'
+          )}
+        >
           <div
             className="flex size-11 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110"
             style={{ backgroundColor: `${accent}1a`, color: accent }}
@@ -39,6 +57,17 @@ function ActionCard({ to, icon: Icon, title, description, accent }) {
             <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         </div>
+
+        {preview && (
+          <div
+            className={cn(
+              'absolute inset-0 flex items-center justify-center transition-opacity duration-200',
+              hovered ? 'opacity-100' : 'pointer-events-none opacity-0'
+            )}
+          >
+            <TaskFeaturePreview active={hovered} />
+          </div>
+        )}
       </Card>
     </Link>
   )
@@ -162,6 +191,7 @@ export function Dashboard({ firstName, username }) {
           title="Start a new task"
           description="Add something to your list and track it through to done."
           accent="#56a456"
+          preview
         />
         <ActionCard
           to="/goals"
