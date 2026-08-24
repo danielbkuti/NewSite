@@ -3,8 +3,10 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth import get_user_model, login, logout
+from django.contrib.auth.tokens import default_token_generator
 from django.http import JsonResponse
 from django.utils import timezone
+from django.utils.http import urlsafe_base64_decode
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
@@ -13,10 +15,14 @@ from .forms import (
     SignupStartForm,
     SignupDetailsForm,
     SignupCompleteForm,
+    PasswordResetRequestForm,
+    PasswordResetConfirmForm,
 )
 from .models import PendingSignup, generate_signup_token
+from .ratelimit import is_rate_limited, record_attempt, reset_rate_limit
 from .services import (
     send_signup_verification_email,
+    send_password_reset_email,
     generate_username_from_name,
 )
 
@@ -24,6 +30,20 @@ User = get_user_model()
 
 # How long a signup-in-progress (and its verification link) stays valid.
 PENDING_SIGNUP_EXPIRY = timedelta(hours=24)
+
+# Failed login attempts, per IP, before login_api starts refusing to
+# even check credentials for a while — a brute-force throttle, not an
+# account lockout (it's keyed on IP, not username, so it can't be used
+# to lock a legitimate user out of their own account from elsewhere).
+LOGIN_RATE_LIMIT = 5
+LOGIN_RATE_WINDOW_SECONDS = 15 * 60
+
+# Password-reset requests, per IP — looser than login (every request
+# here "succeeds" from the caller's point of view regardless of
+# whether the email exists), mainly to stop this becoming a free email
+# bomb rather than to stop credential guessing.
+PASSWORD_RESET_RATE_LIMIT = 3
+PASSWORD_RESET_RATE_WINDOW_SECONDS = 60 * 60
 
 
 @ensure_csrf_cookie
@@ -51,7 +71,19 @@ def login_api(request):
     """
     JSON counterpart to the existing template-based login_view. Reuses
     CustomLoginForm so validation/auth rules live in exactly one place.
+
+    Rate-limited per client IP (LOGIN_RATE_LIMIT failed attempts per
+    LOGIN_RATE_WINDOW_SECONDS) — checked before the credentials are
+    even looked at, so once tripped, further guesses aren't processed
+    at all. Only failures count against the limit; the counter resets
+    the moment a login actually succeeds.
     """
+    if is_rate_limited(request, "login", LOGIN_RATE_LIMIT, LOGIN_RATE_WINDOW_SECONDS):
+        return JsonResponse({
+            "authenticated": False,
+            "detail": "Too many failed login attempts. Please wait a few minutes and try again.",
+        }, status=429)
+
     try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
@@ -59,6 +91,7 @@ def login_api(request):
 
     form = CustomLoginForm(request, data=data)
     if form.is_valid():
+        reset_rate_limit(request, "login")
         user = form.get_user()
         login(request, user)
         return JsonResponse({
@@ -67,6 +100,7 @@ def login_api(request):
             "first_name": user.first_name,
         })
 
+    record_attempt(request, "login", LOGIN_RATE_WINDOW_SECONDS)
     return JsonResponse({
         "authenticated": False,
         "errors": form.errors.get_json_data(),
@@ -275,3 +309,91 @@ def check_email_exists(request):
 
     exists = User.objects.filter(email__iexact=email).exists()
     return JsonResponse({"exists": exists})
+
+
+@require_http_methods(["POST"])
+def password_reset_request_api(request):
+    """
+    Step 1 of forgot-password. Always responds the same way whether or
+    not the email actually belongs to an account — unlike
+    check_email_exists above, this endpoint deliberately does NOT leak
+    that, since nothing in the reset flow itself needs to know.
+    """
+    if is_rate_limited(request, "password-reset", PASSWORD_RESET_RATE_LIMIT, PASSWORD_RESET_RATE_WINDOW_SECONDS):
+        return JsonResponse({"detail": "Too many requests. Please wait a while and try again."}, status=429)
+    record_attempt(request, "password-reset", PASSWORD_RESET_RATE_WINDOW_SECONDS)
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "Invalid JSON body."}, status=400)
+
+    form = PasswordResetRequestForm(data)
+    if not form.is_valid():
+        return JsonResponse({"success": False, "errors": form.errors.get_json_data()}, status=400)
+
+    email = form.cleaned_data["email"]
+    try:
+        # is_active=True: an account that never finished signup
+        # verification has no usable password to reset yet.
+        user = User.objects.get(email__iexact=email, is_active=True)
+    except User.DoesNotExist:
+        user = None
+
+    if user is not None:
+        send_password_reset_email(user)
+
+    return JsonResponse({"success": True})
+
+
+@require_http_methods(["GET", "POST"])
+def password_reset_confirm_api(request, uidb64, token):
+    """
+    One resource, two actions on it — same shape as signup_pending_api:
+
+    - GET: hit when the emailed link is first opened. Just validates
+      the uid/token are still good, so the frontend can show the
+      "choose a new password" form or a clean "link invalid/expired"
+      state without requiring a submission first.
+    - POST: sets the new password. Re-validates the same uid/token
+      rather than trusting the earlier GET happened, since the two
+      requests aren't otherwise tied together.
+    """
+    try:
+        uid = urlsafe_base64_decode(uidb64).decode()
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+
+    valid = user is not None and default_token_generator.check_token(user, token)
+
+    if request.method == "GET":
+        return JsonResponse({"valid": valid})
+
+    if not valid:
+        return JsonResponse({"detail": "This link is invalid or has expired."}, status=400)
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "Invalid JSON body."}, status=400)
+
+    form = PasswordResetConfirmForm(data, user=user)
+    if not form.is_valid():
+        return JsonResponse({"success": False, "errors": form.errors.get_json_data()}, status=400)
+
+    user.set_password(form.cleaned_data["password1"])
+    user.save(update_fields=["password"])
+
+    # Same reasoning as signup_complete_api: we're not going through
+    # authenticate(), so Django has no way to infer which backend to
+    # credit — has to be set explicitly before login() will accept it.
+    user.backend = settings.AUTHENTICATION_BACKENDS[0]
+    login(request, user)
+
+    return JsonResponse({
+        "success": True,
+        "authenticated": True,
+        "username": user.username,
+        "first_name": user.first_name,
+    })

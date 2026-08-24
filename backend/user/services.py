@@ -2,6 +2,7 @@ import re
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.encoding import force_bytes
@@ -49,6 +50,27 @@ def send_signup_verification_email(pending_signup):
         'noreply@yourdomain.com',
         [pending_signup.email],
     )
+
+
+def send_password_reset_email(user):
+    """
+    Uses Django's own PasswordResetTokenGenerator (default_token_generator)
+    rather than the custom activation TokenGenerator in tokens.py — its
+    hash already folds in the user's current password + last_login, so
+    the token naturally stops working the moment the password actually
+    changes (or after Django's own PASSWORD_RESET_TIMEOUT). That's
+    exactly the property a reset link needs and the activation token,
+    built for a different purpose, doesn't provide.
+    """
+    token = default_token_generator.make_token(user)
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    reset_url = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}/"
+
+    message = render_to_string('account/password_reset_email.html', {
+        'user': user,
+        'reset_url': reset_url,
+    })
+    send_mail('Reset your FlexMaster password', message, 'noreply@yourdomain.com', [user.email])
 
 
 def generate_username_from_name(first_name, last_name):

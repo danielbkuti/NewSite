@@ -11,7 +11,43 @@ import {
   updateSubTask,
   deleteSubTask,
 } from '@/lib/tasks'
-import { UPCOMING_WINDOW_MS } from '@/lib/utils'
+import { cn, UPCOMING_WINDOW_MS } from '@/lib/utils'
+
+// "Due date" is the only sort with buckets and promoted subtasks —
+// that machinery exists specifically to surface urgency, which isn't
+// a meaningful concept under the other sorts. Those render a flat list
+// of full task cards only.
+const SORT_OPTIONS = [
+  { value: 'due', label: 'Due date' },
+  { value: 'name', label: 'Name (A–Z)' },
+  { value: 'newest', label: 'Newest created' },
+  { value: 'oldest', label: 'Oldest created' },
+]
+
+const FILTER_OPTIONS = [
+  { value: 'all', label: 'All' },
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'nodate', label: 'No deadline' },
+]
+
+function applyFilter(tasks, filterMode) {
+  if (filterMode === 'overdue') {
+    const now = Date.now()
+    return tasks.filter((t) => t.dateDeadline && new Date(t.dateDeadline).getTime() < now)
+  }
+  if (filterMode === 'nodate') {
+    return tasks.filter((t) => !t.dateDeadline)
+  }
+  return tasks
+}
+
+function sortTasksFlat(tasks, sortMode) {
+  const sorted = [...tasks]
+  if (sortMode === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name))
+  else if (sortMode === 'newest') sorted.sort((a, b) => new Date(b.dateCreated) - new Date(a.dateCreated))
+  else if (sortMode === 'oldest') sorted.sort((a, b) => new Date(a.dateCreated) - new Date(b.dateCreated))
+  return sorted
+}
 
 // How many completed tasks show inline before the list defers to the
 // Progress page instead of just growing forever — same spirit as the
@@ -40,6 +76,8 @@ export function TaskList() {
   // a subtask) would re-fetch `tasks` and re-open the modal the user
   // just dismissed.
   const overdueCheckedRef = useRef(false)
+  const [sortMode, setSortMode] = useState('due')
+  const [filterMode, setFilterMode] = useState('all')
 
   useEffect(() => {
     fetchTasks()
@@ -185,6 +223,7 @@ export function TaskList() {
   // already `completed` server-side — it only actually moves down once
   // its timer clears.
   const activeTasks = tasks.filter((t) => !t.completed || celebratingIds.has(t.id))
+  const filteredActiveTasks = applyFilter(activeTasks, filterMode)
   // Most recently completed first, same ordering rule as the task
   // detail page's completed-subtask group — only the freshest few are
   // worth showing inline, the rest live on /progress.
@@ -212,17 +251,16 @@ export function TaskList() {
     )
   }
 
-  // Default sort, until a real sort/filter UI exists: every active
-  // task always gets its own entry at its own deadline, and every
-  // dated, incomplete subtask of every task *also* gets its own entry
-  // at its own deadline — not just the single soonest one per task.
-  // Each holds exactly as much priority in the sort as any standalone
-  // task; a task with three subtasks due before it can show all three
-  // ahead of it, each also still shows up bundled in its own task's
-  // normal cascade preview lower down. Undated subtasks never get
-  // promoted this way; they stay bundled in the task's normal preview
-  // only.
-  const sortEntries = activeTasks.flatMap((task) => {
+  // The "Due date" sort: every active task always gets its own entry
+  // at its own deadline, and every dated, incomplete subtask of every
+  // task *also* gets its own entry at its own deadline — not just the
+  // single soonest one per task. Each holds exactly as much priority
+  // in the sort as any standalone task; a task with three subtasks due
+  // before it can show all three ahead of it, each also still shows up
+  // bundled in its own task's normal cascade preview lower down.
+  // Undated subtasks never get promoted this way; they stay bundled in
+  // the task's normal preview only.
+  const sortEntries = filteredActiveTasks.flatMap((task) => {
     const entries = [{ type: 'task', task, date: task.dateDeadline }]
     const datedIncompleteSubtasks = task.subtasks.filter((s) => !s.completed && s.dateDeadline)
     for (const subtask of datedIncompleteSubtasks) {
@@ -289,9 +327,57 @@ export function TaskList() {
         </p>
       ) : (
         <>
-          {renderBucket('Due this week', dueSoon)}
-          {renderBucket('No deadline', undated)}
-          {renderBucket('Later', later)}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {FILTER_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setFilterMode(option.value)}
+                  className={cn(
+                    'rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                    filterMode === option.value
+                      ? 'bg-foreground text-background'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/70'
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              Sort by
+              <select
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value)}
+                className="rounded-md border bg-background px-2 py-1 text-xs text-foreground outline-none focus-visible:border-ring"
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {sortMode === 'due' ? (
+            filteredActiveTasks.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No tasks match this filter.</p>
+            ) : (
+              <>
+                {renderBucket('Due this week', dueSoon)}
+                {renderBucket('No deadline', undated)}
+                {renderBucket('Later', later)}
+              </>
+            )
+          ) : filteredActiveTasks.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No tasks match this filter.</p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {sortTasksFlat(filteredActiveTasks, sortMode).map(renderCard)}
+            </div>
+          )}
 
           {completedTasks.length > 0 && (
             <div className="flex flex-col gap-4">
