@@ -207,6 +207,7 @@ export function TaskList() {
         onToggleSubtask={handleToggleSubtask}
         onSetSubtaskDeadline={handleSetSubtaskDeadline}
         onDeleteSubtask={handleDeleteSubtask}
+        pulseReady={!showOverdueGate}
       />
     )
   }
@@ -258,6 +259,7 @@ export function TaskList() {
         }}
         onToggleComplete={(checked) => handleToggleSubtask(task, subtask, checked)}
         onSetDeadline={(dateDeadline) => handleSetSubtaskDeadline(task, subtask, dateDeadline)}
+        pulseReady={!showOverdueGate}
       />
     )
   }

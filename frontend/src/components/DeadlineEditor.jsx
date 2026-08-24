@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Slider } from '@/components/ui/slider'
+import { WheelPicker } from '@/components/ui/wheel-picker'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 
 const DAY_MS = 24 * 60 * 60 * 1000
-// Slider range: 90 days back (room to backdate/correct) to a year
-// ahead. Whole-day steps — the slider picks a date, not an instant;
-// the optional time slider below layers precision on top of that.
+// Wheel range: 90 days back (room to backdate/correct) to a year
+// ahead. Whole-day rows — the date wheel picks a day, not an instant;
+// the optional time wheel below layers precision on top of that.
 const MIN_DAY_OFFSET = -90
 const MAX_DAY_OFFSET = 365
 const TIME_STEP_MINUTES = 15
@@ -30,16 +30,24 @@ function clamp(n, min, max) {
   return Math.min(max, Math.max(min, n))
 }
 
-function formatSliderDate(date) {
+// "Today" / "Tomorrow" read better than a bare date in a picker column
+// — everything further out falls back to a short weekday + date, with
+// the year only when it isn't the current one.
+function formatWheelDateLabel(offset) {
+  if (offset === 0) return 'Today'
+  if (offset === 1) return 'Tomorrow'
+  if (offset === -1) return 'Yesterday'
+  const date = dayOffsetToDate(offset)
+  const sameYear = date.getFullYear() === new Date().getFullYear()
   return date.toLocaleDateString(undefined, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
-    year: 'numeric',
+    year: sameYear ? undefined : 'numeric',
   })
 }
 
-function formatSliderTime(minutes) {
+function formatWheelTimeLabel(minutes) {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   const period = h >= 12 ? 'PM' : 'AM'
@@ -47,13 +55,29 @@ function formatSliderTime(minutes) {
   return `${h12}:${String(m).padStart(2, '0')} ${period}`
 }
 
-// Slider-based replacement for the old `datetime-local` input, shared
-// by every place a task or subtask deadline gets edited: TaskCard's
-// own deadline, a subtask's due-date bubble (cascade + promoted card),
-// and the task detail page. Time-of-day is opt-in via the checkbox —
+function buildDateItems(minDayOffset) {
+  const items = []
+  for (let offset = minDayOffset; offset <= MAX_DAY_OFFSET; offset++) {
+    items.push({ value: offset, label: formatWheelDateLabel(offset) })
+  }
+  return items
+}
+
+const TIME_ITEMS = (() => {
+  const items = []
+  for (let minutes = 0; minutes <= 1425; minutes += TIME_STEP_MINUTES) {
+    items.push({ value: minutes, label: formatWheelTimeLabel(minutes) })
+  }
+  return items
+})()
+
+// Apple-style vertical wheel picker for editing a task or subtask
+// deadline — shared by every place that happens: TaskCard's own
+// deadline, a subtask's due-date bubble (cascade + promoted card), and
+// the task detail page. Time-of-day is opt-in via the checkbox —
 // unchecked, the deadline lands on the selected date at local
 // midnight (same convention date-only deadlines already used before
-// time-of-day support existed); checked, a second slider picks the
+// time-of-day support existed); checked, a second wheel picks the
 // time. Always renders as a self-contained floating popover, since
 // every call site opens it the same way: a trigger badge toggles it
 // into view without disturbing the rest of the layout underneath.
@@ -62,7 +86,7 @@ function formatSliderTime(minutes) {
 // is what the backend actually allows for a *subtask* deadline — but a
 // *task* deadline is rejected outright if it's in the past (even
 // resubmitting an already-past one unchanged), so both task-level call
-// sites pass `minDayOffset={0}` to keep the slider from ever landing on
+// sites pass `minDayOffset={0}` to keep the wheel from ever landing on
 // a value Save can't possibly accept. That also means an already-
 // overdue task's editor opens on today, not its stale past deadline —
 // correct, since the only thing Save can do here is set a new one.
@@ -74,10 +98,10 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
     clamp(dateToDayOffset(initial), minDayOffset, MAX_DAY_OFFSET)
   )
   const [hasTime, setHasTime] = useState(initialHasTime)
-  // Rounded to the slider's own step at init — otherwise an existing
+  // Rounded to the wheel's own step at init — otherwise an existing
   // deadline whose minutes aren't a multiple of 15 (most of them,
-  // realistically) renders the label a few minutes ahead of where the
-  // slider itself snaps to, until the user actually drags it once.
+  // realistically) renders a few minutes off from where the wheel
+  // itself lands, until the user actually scrolls it once.
   const [minutes, setMinutes] = useState(() => {
     const raw = initial.getHours() * 60 + initial.getMinutes()
     return Math.round(raw / TIME_STEP_MINUTES) * TIME_STEP_MINUTES
@@ -85,6 +109,7 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
+  const dateItems = buildDateItems(minDayOffset)
   const selectedDate = dayOffsetToDate(dayOffset)
 
   async function handleSave() {
@@ -103,7 +128,7 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
   }
 
   // Distinct from Cancel — this actually clears an existing deadline.
-  // Only offered when there is one; a slider has no natural "empty"
+  // Only offered when there is one; a wheel has no natural "empty"
   // position the way the old text input did.
   async function handleClear() {
     setError(null)
@@ -120,44 +145,22 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
     <div
       onClick={(e) => e.stopPropagation()}
       className={cn(
-        'absolute top-full right-0 z-30 mt-2 w-64 rounded-lg border bg-card p-3 text-left shadow-lg',
+        'absolute top-full right-0 z-30 mt-2 w-56 rounded-lg border bg-card p-3 text-left shadow-lg',
         className
       )}
     >
-      <div className="flex items-center justify-between text-xs font-medium">
-        <span>Date</span>
-        <span className="text-muted-foreground">{formatSliderDate(selectedDate)}</span>
-      </div>
-      <Slider
-        min={minDayOffset}
-        max={MAX_DAY_OFFSET}
-        step={1}
-        value={dayOffset}
-        onValueChange={setDayOffset}
-        disabled={saving}
-        className="mt-1"
-      />
+      <p className="text-center text-xs font-medium text-muted-foreground">Date</p>
+      <WheelPicker items={dateItems} value={dayOffset} onChange={setDayOffset} />
 
-      <label className="mt-3 flex items-center gap-2 text-xs">
+      <label className="mt-2 flex items-center justify-center gap-2 text-xs">
         <Checkbox checked={hasTime} onCheckedChange={setHasTime} disabled={saving} />
         Add a time
       </label>
 
       {hasTime && (
         <>
-          <div className="mt-3 flex items-center justify-between text-xs font-medium">
-            <span>Time</span>
-            <span className="text-muted-foreground">{formatSliderTime(minutes)}</span>
-          </div>
-          <Slider
-            min={0}
-            max={1425}
-            step={TIME_STEP_MINUTES}
-            value={minutes}
-            onValueChange={setMinutes}
-            disabled={saving}
-            className="mt-1"
-          />
+          <p className="mt-2 text-center text-xs font-medium text-muted-foreground">Time</p>
+          <WheelPicker items={TIME_ITEMS} value={minutes} onChange={setMinutes} />
         </>
       )}
 
