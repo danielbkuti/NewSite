@@ -8,6 +8,7 @@ import { ConfettiBurst } from '@/components/ConfettiBurst'
 import { cn, formatDeadline, calculateProgress } from '@/lib/utils'
 import { useDeadlineStatus } from '@/hooks/useDeadlineStatus'
 import { DeadlineEditor } from '@/components/DeadlineEditor'
+import { PulseRing } from '@/components/PulseRing'
 
 const PROGRESS_GRADIENT = 'bg-gradient-to-r from-[#e0c3fc] via-[#7c5fb0] to-[#8ec5fc]'
 // The hover-fill preview on the Pending button (see PendingCompleteButton).
@@ -59,6 +60,7 @@ export function SubtaskStackCard({
   onToggleComplete,
   onSetDeadline,
   partOf,
+  pulseReady = true,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [editingDeadline, setEditingDeadline] = useState(false)
@@ -133,6 +135,7 @@ export function SubtaskStackCard({
         </div>
       ) : subtask.dateDeadline ? (
         <div className="relative shrink-0" ref={menuRef}>
+          {(countdown.isOverdue || countdown.isUrgent) && <PulseRing ready={pulseReady} />}
           <button
             type="button"
             onClick={(e) => {
@@ -140,7 +143,7 @@ export function SubtaskStackCard({
               setMenuOpen((v) => !v)
             }}
             className={cn(
-              'rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums transition-colors',
+              'relative rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums transition-colors',
               countdown.isOverdue
                 ? 'bg-red-700 text-white hover:bg-red-800'
                 : countdown.isUrgent
@@ -230,7 +233,7 @@ export function SubtaskStackCard({
 // the fill, not just once it finishes; a click always fires immediately
 // regardless of hover progress. Moving the mouse away cancels the timer
 // and the fill retreats (plain CSS transition reversing).
-function PendingCompleteButton({ task, blocked, onClick }) {
+export function PendingCompleteButton({ task, blocked, onClick }) {
   const [hoverFilled, setHoverFilled] = useState(false)
   const timerRef = useRef(null)
 
@@ -297,6 +300,7 @@ export function TaskCard({
   onAddSubtask,
   onToggleSubtask,
   onSetSubtaskDeadline,
+  pulseReady = true,
 }) {
   const navigate = useNavigate()
   const [editingDeadline, setEditingDeadline] = useState(false)
@@ -442,26 +446,29 @@ export function TaskCard({
               />
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => setEditingDeadline(true)}
-              className={cn(
-                'rounded-full px-3 py-1 text-xs font-medium tabular-nums transition-colors',
-                countdown.isOverdue
-                  ? 'bg-red-700 text-white hover:bg-red-800'
+            <span className="relative inline-flex">
+              {(countdown.isOverdue || countdown.isUrgent) && <PulseRing ready={pulseReady} />}
+              <button
+                type="button"
+                onClick={() => setEditingDeadline(true)}
+                className={cn(
+                  'relative rounded-full px-3 py-1 text-xs font-medium tabular-nums transition-colors',
+                  countdown.isOverdue
+                    ? 'bg-red-700 text-white hover:bg-red-800'
+                    : countdown.isUrgent
+                      ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                      : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                )}
+              >
+                {countdown.isOverdue
+                  ? 'Overdue'
                   : countdown.isUrgent
-                    ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                    : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-              )}
-            >
-              {countdown.isOverdue
-                ? 'Overdue'
-                : countdown.isUrgent
-                  ? `Due in: ${countdown.countdownDisplay}`
-                  : task.dateDeadline
-                    ? `Due ${formatDeadline(task.dateDeadline)}`
-                    : 'Set deadline'}
-            </button>
+                    ? `Due in: ${countdown.countdownDisplay}`
+                    : task.dateDeadline
+                      ? `Due ${formatDeadline(task.dateDeadline)}`
+                      : 'Set deadline'}
+              </button>
+            </span>
           )}
         </div>
 
@@ -548,6 +555,7 @@ export function TaskCard({
                   }}
                   onToggleComplete={(checked) => handleToggleSubtaskComplete(subtask, checked)}
                   onSetDeadline={(dateDeadline) => onSetSubtaskDeadline(task, subtask, dateDeadline)}
+                  pulseReady={pulseReady}
                 />
               ))}
               {/* fades the bottom of the collapsed stack out instead of

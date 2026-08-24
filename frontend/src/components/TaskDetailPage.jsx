@@ -1,12 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import { ArrowLeft, Trash2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
-import { fetchTask, updateTask, createSubTask, updateSubTask } from '@/lib/tasks'
+import { Button } from '@/components/ui/button'
+import { fetchTask, updateTask, deleteTask, createSubTask, updateSubTask } from '@/lib/tasks'
 import { cn, formatDeadline, calculateProgress, isDeadlineUrgent } from '@/lib/utils'
 import { useDeadlineStatus } from '@/hooks/useDeadlineStatus'
 import { DeadlineEditor } from '@/components/DeadlineEditor'
 import { AddSubtaskForm } from '@/components/AddSubtaskForm'
+import { InlineEditableName } from '@/components/InlineEditableName'
+import { ConfettiBurst } from '@/components/ConfettiBurst'
+import { PendingCompleteButton } from '@/components/TaskCard'
+import { PulseRing } from '@/components/PulseRing'
 
 const PROGRESS_GRADIENT = 'bg-gradient-to-r from-[#e0c3fc] via-[#7c5fb0] to-[#8ec5fc]'
 // How long a just-checked subtask stays in place (checkbox filled
@@ -14,6 +19,11 @@ const PROGRESS_GRADIENT = 'bg-gradient-to-r from-[#e0c3fc] via-[#7c5fb0] to-[#8e
 // into the completed group — same idea as the cascade on the task
 // card, so checking one off here doesn't just instantly relocate it.
 const SUBTASK_CELEBRATION_MS = 1400
+// Same idea, for the task's own completion — only relevant when there
+// are no subtasks (see the Pending/Complete button below), since with
+// subtasks the task's completion is still gated behind the list, not
+// this page.
+const TASK_CELEBRATION_MS = 1300
 // How long the "due soon, consider extending" bubble stays up before
 // fading — it's a one-time heads-up on opening the page, not a
 // persistent banner.
@@ -32,15 +42,22 @@ const COMPLETED_SUBTASK_PREVIEW_COUNT = 3
 // to the very bottom of the whole list.
 export function TaskDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [status, setStatus] = useState('loading')
   const [task, setTask] = useState(null)
   const [busyIds, setBusyIds] = useState(() => new Set())
   // Subtask ids mid-celebration — kept sorted as "not yet done" until
   // their timer clears, so checking one off doesn't instantly jump it.
   const [celebratingIds, setCelebratingIds] = useState(() => new Set())
+  // Same idea, for the task's own Pending -> Complete button (only
+  // rendered when there are no subtasks — see below).
+  const [celebratingTask, setCelebratingTask] = useState(false)
   const [showDeadlineHint, setShowDeadlineHint] = useState(false)
   const [deadlineHintMounted, setDeadlineHintMounted] = useState(false)
   const hintCheckedRef = useRef(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(null)
   const [editingDeadline, setEditingDeadline] = useState(false)
   const [addingSubtask, setAddingSubtask] = useState(false)
   // Safe to call unconditionally with an as-yet-null task (dateDeadline
@@ -101,6 +118,54 @@ export function TaskDetailPage() {
     await createSubTask({ task: id, name })
     const fresh = await fetchTask(id)
     setTask(fresh)
+  }
+
+  // Rename the task or a subtask — neither was possible anywhere in
+  // the app until now, only creating and (for the task) deleting.
+  async function handleRenameTask(name) {
+    const updated = await updateTask(id, { name })
+    setTask((current) => ({ ...current, ...updated }))
+  }
+
+  async function handleRenameSubtask(subtask, name) {
+    await updateSubTask(subtask.id, { name })
+    const fresh = await fetchTask(id)
+    setTask(fresh)
+  }
+
+  // This is the one place completing a task with open subtasks is
+  // actually allowed — the list's own TaskCard stays gated (blocked
+  // until every subtask is already done, never auto-completing them);
+  // choosing to complete from here instead cascades, closing out
+  // whatever's still open first. Reopening doesn't reverse that — the
+  // subtasks stay completed, same as the existing "reopening never
+  // un-completes subtasks" rule elsewhere.
+  async function handleToggleTaskComplete() {
+    const next = !task.completed
+    if (next) {
+      setCelebratingTask(true)
+      setTimeout(() => setCelebratingTask(false), TASK_CELEBRATION_MS)
+      const incomplete = task.subtasks.filter((s) => !s.completed)
+      if (incomplete.length > 0) {
+        await Promise.all(incomplete.map((s) => updateSubTask(s.id, { completed: true })))
+      }
+    }
+    await updateTask(id, { completed: next })
+    const fresh = await fetchTask(id)
+    setTask(fresh)
+  }
+
+  async function handleDeleteConfirm() {
+    setDeleteError(null)
+    setDeleting(true)
+    try {
+      await deleteTask(id)
+      navigate('/tasks')
+    } catch (err) {
+      setDeleteError(err.data?.detail ?? 'Could not delete this task.')
+      setDeleting(false)
+      setConfirmingDelete(false)
+    }
   }
 
   async function handleToggleSubtask(subtask, checked) {
@@ -183,18 +248,51 @@ export function TaskDetailPage() {
   const hiddenCompletedSubtaskCount = completedSubtasks.length - visibleCompletedSubtasks.length
   const sortedSubtasks = [...openSubtasks, ...visibleCompletedSubtasks]
 
+  const hasSubtasks = task.subtasks.length > 0
+
   return (
     <div className="mx-auto max-w-3xl px-8 py-8">
-      <Link
-        to="/tasks"
-        className="mb-4 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
-        Back to tasks
-      </Link>
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <Link
+          to="/tasks"
+          className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-3.5" />
+          Back to tasks
+        </Link>
+
+        {confirmingDelete ? (
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="destructive" onClick={handleDeleteConfirm} disabled={deleting}>
+              {deleting ? 'Deleting…' : 'Confirm'}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => setConfirmingDelete(true)}
+            aria-label="Delete task"
+          >
+            <Trash2 />
+          </Button>
+        )}
+      </div>
+      {deleteError && <p className="mb-2 text-xs text-destructive">{deleteError}</p>}
 
       <div className="flex items-center justify-between gap-6">
-        <h1 className="truncate text-2xl font-bold tracking-tight">{task.name}</h1>
+        <h1 className="min-w-0 flex-1">
+          <InlineEditableName
+            value={task.name}
+            onSave={handleRenameTask}
+            textClassName="text-2xl font-bold tracking-tight"
+            inputClassName="w-full text-2xl font-bold tracking-tight"
+          />
+        </h1>
         <div className="w-44 shrink-0">
           {task.completed ? (
             <div className="flex flex-col items-end gap-1">
@@ -206,18 +304,36 @@ export function TaskDetailPage() {
               </p>
             </div>
           ) : (
-            <>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className={cn('h-full rounded-full', PROGRESS_GRADIENT)}
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <p className="mt-1 text-right text-xs text-muted-foreground">{progress}% complete</p>
-            </>
+            // Always a real Pending/Complete button here, whether or
+            // not there are subtasks — unlike the list's TaskCard,
+            // this page lets completing cascade-close any that are
+            // still open (see handleToggleTaskComplete), so it's never
+            // actually blocked. With no subtasks, this is also the
+            // only completion progress shown at all (no meaningless
+            // 0%/100% bar with nothing behind it); with subtasks, the
+            // bar below it still tracks their individual progress.
+            <div className="relative inline-flex justify-end">
+              {celebratingTask && <ConfettiBurst />}
+              <PendingCompleteButton task={task} blocked={false} onClick={handleToggleTaskComplete} />
+            </div>
           )}
         </div>
       </div>
+
+      {!task.completed && hasSubtasks && (
+        // Repositioned under the title and full width, same treatment
+        // as the progress meter on the task card in the list — it used
+        // to live cramped in a w-44 column next to the title.
+        <div className="mt-4">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn('h-full rounded-full transition-all duration-500 ease-out', PROGRESS_GRADIENT)}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{progress}% complete</p>
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">Created {formatDeadline(task.dateCreated)}</p>
@@ -239,26 +355,29 @@ export function TaskDetailPage() {
           </div>
         ) : (
           <div className="flex flex-col items-end gap-0.5">
-            <button
-              type="button"
-              onClick={() => setEditingDeadline(true)}
-              className={cn(
-                'rounded-full px-3 py-1 text-xs font-medium tabular-nums transition-colors',
-                deadlineStatus.isOverdue
-                  ? 'bg-red-700 text-white hover:bg-red-800'
+            <span className="relative inline-flex">
+              {deadlineStatus.isOverdue && <PulseRing />}
+              <button
+                type="button"
+                onClick={() => setEditingDeadline(true)}
+                className={cn(
+                  'relative rounded-full px-3 py-1 text-xs font-medium tabular-nums transition-colors',
+                  deadlineStatus.isOverdue
+                    ? 'bg-red-700 text-white hover:bg-red-800'
+                    : deadlineStatus.isUrgent
+                      ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                      : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                )}
+              >
+                {deadlineStatus.isOverdue
+                  ? 'Overdue'
                   : deadlineStatus.isUrgent
-                    ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                    : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-              )}
-            >
-              {deadlineStatus.isOverdue
-                ? 'Overdue'
-                : deadlineStatus.isUrgent
-                  ? `Due in: ${deadlineStatus.countdownDisplay}`
-                  : task.dateDeadline
-                    ? `Due ${formatDeadline(task.dateDeadline)}`
-                    : 'Set deadline'}
-            </button>
+                    ? `Due in: ${deadlineStatus.countdownDisplay}`
+                    : task.dateDeadline
+                      ? `Due ${formatDeadline(task.dateDeadline)}`
+                      : 'Set deadline'}
+              </button>
+            </span>
             {deadlineStatus.isOverdue && (
               <span className="text-[11px] font-medium text-red-700 tabular-nums">
                 Due: {deadlineStatus.overdueDisplay} ago
@@ -268,7 +387,7 @@ export function TaskDetailPage() {
         )}
       </div>
 
-      {task.subtasks.length === 0 ? (
+      {!hasSubtasks ? (
         <div className="mt-8">
           {addingSubtask ? (
             <AddSubtaskForm onAdd={handleAddSubtask} />
@@ -295,6 +414,7 @@ export function TaskDetailPage() {
                 checked={checked}
                 busy={busyIds.has(subtask.id)}
                 onToggle={(value) => handleToggleSubtask(subtask, value)}
+                onRename={(name) => handleRenameSubtask(subtask, name)}
               />
             )
           }}
@@ -334,7 +454,7 @@ export function TaskDetailPage() {
 // "Overdue" badge + the plain due date is enough there), the detail
 // page is where someone's actually looking at one task, so the "how
 // overdue" duration ticks for real, in days once it runs past 24h.
-function SubtaskDetailRow({ subtask, checked, busy, onToggle }) {
+function SubtaskDetailRow({ subtask, checked, busy, onToggle, onRename }) {
   const status = useDeadlineStatus(subtask.dateDeadline, checked, { liveOverdue: true })
 
   return (
@@ -345,14 +465,15 @@ function SubtaskDetailRow({ subtask, checked, busy, onToggle }) {
         disabled={busy}
         className="shrink-0 data-checked:border-emerald-500 data-checked:bg-emerald-500"
       />
-      <span
-        className={cn(
-          'flex-1 truncate transition-colors duration-300',
+      <InlineEditableName
+        value={subtask.name}
+        onSave={onRename}
+        textClassName={cn(
+          'flex-1 transition-colors duration-300',
           checked && 'text-muted-foreground line-through'
         )}
-      >
-        {subtask.name}
-      </span>
+        inputClassName="flex-1 text-sm"
+      />
       {subtask.dateDeadline &&
         (status.isOverdue ? (
           <div className="flex shrink-0 flex-col items-end gap-0.5">
