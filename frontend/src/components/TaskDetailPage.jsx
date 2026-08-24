@@ -262,7 +262,8 @@ export function TaskDetailPage() {
         </Link>
 
         {confirmingDelete ? (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-muted-foreground">Are you sure you want to delete this task?</p>
             <Button size="sm" variant="destructive" onClick={handleDeleteConfirm} disabled={deleting}>
               {deleting ? 'Deleting…' : 'Confirm'}
             </Button>
@@ -277,6 +278,7 @@ export function TaskDetailPage() {
             variant="ghost"
             onClick={() => setConfirmingDelete(true)}
             aria-label="Delete task"
+            className="hover:text-destructive"
           >
             <Trash2 />
           </Button>
