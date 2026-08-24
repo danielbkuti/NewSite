@@ -141,3 +141,34 @@
     opacity: 0;
   }
 }
+
+/* AddTaskFab's option/action cards — each one rises up from the FAB's
+   own position rather than just appearing, since the whole menu is
+   meant to read as originating from that button. Applied per-card with
+   a staggered delay (closest to the FAB first) via inline style. */
+@keyframes fab-card-rise {
+  0% {
+    transform: translateY(14px) scale(0.92);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Soft radial glow behind the FAB's plus icon, active only while its
+   menu is open — visually ties the button to the cards floating above
+   it, same spirit as the pulsing ring elsewhere (PulseRing) but a
+   slow ambient breathe rather than an attention-grabbing pulse. */
+@keyframes fab-glow-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.85;
+  }
+}
