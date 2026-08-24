@@ -10,10 +10,21 @@ import {
   deleteSubTask,
 } from '@/lib/tasks'
 
+// How long a just-completed task stays put (playing its confetti burst)
+// before it's actually allowed to drop into the Completed section.
+// Comfortably covers the burst's own animation (850ms + up to ~230ms of
+// staggered particle start delays).
+const CELEBRATION_MS = 1300
+
 export function TaskList() {
   // 'loading' | 'ready' | 'error'
   const [status, setStatus] = useState('loading')
   const [tasks, setTasks] = useState([])
+  // Task ids currently mid-celebration — kept in the active section
+  // (regardless of their actual completed state) until their timer
+  // clears, so completing a task doesn't just instantly teleport it to
+  // the bottom of the page.
+  const [celebratingIds, setCelebratingIds] = useState(() => new Set())
 
   useEffect(() => {
     fetchTasks()
@@ -31,6 +42,20 @@ export function TaskList() {
   // dateCompleted server-side, which the client has no way to know in
   // advance.
   async function handleToggle(task, checked) {
+    // Marking complete (not reopening) plays a short celebration in
+    // place before the task is allowed to actually drop into the
+    // Completed section — see CELEBRATION_MS.
+    if (checked) {
+      setCelebratingIds((current) => new Set(current).add(task.id))
+      setTimeout(() => {
+        setCelebratingIds((current) => {
+          const next = new Set(current)
+          next.delete(task.id)
+          return next
+        })
+      }, CELEBRATION_MS)
+    }
+
     setTasks((current) =>
       current.map((t) => (t.id === task.id ? { ...t, completed: checked } : t))
     )
@@ -98,6 +123,14 @@ export function TaskList() {
     await refreshTask(task.id)
   }
 
+  // Same shape as handleSetDeadline, for a subtask instead of the task
+  // itself — used by the "Change deadline" option on a subtask's
+  // due-date bubble in the task list's cascade preview.
+  async function handleSetSubtaskDeadline(task, subtask, dateDeadline) {
+    await updateSubTask(subtask.id, { dateDeadline })
+    await refreshTask(task.id)
+  }
+
   async function handleDeleteSubtask(task, subtask) {
     await deleteSubTask(subtask.id)
     await refreshTask(task.id)
@@ -113,19 +146,24 @@ export function TaskList() {
     )
   }
 
-  const activeTasks = tasks.filter((t) => !t.completed)
-  const completedTasks = tasks.filter((t) => t.completed)
+  // A celebrating task stays in the active list even though it's
+  // already `completed` server-side — it only actually moves down once
+  // its timer clears.
+  const activeTasks = tasks.filter((t) => !t.completed || celebratingIds.has(t.id))
+  const completedTasks = tasks.filter((t) => t.completed && !celebratingIds.has(t.id))
 
   function renderCard(task) {
     return (
       <TaskCard
         key={task.id}
         task={task}
+        celebrating={celebratingIds.has(task.id)}
         onToggleComplete={handleToggle}
         onSetDeadline={handleSetDeadline}
         onDelete={handleDelete}
         onAddSubtask={handleAddSubtask}
         onToggleSubtask={handleToggleSubtask}
+        onSetSubtaskDeadline={handleSetSubtaskDeadline}
         onDeleteSubtask={handleDeleteSubtask}
       />
     )
