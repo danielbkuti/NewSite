@@ -127,3 +127,17 @@
     @apply font-sans;
     }
 }
+
+/* Task-completion confetti burst (TaskCard) — a plain @keyframes rather
+   than a Tailwind utility since each particle needs its own randomized
+   end position via --dx/--dy/--rot custom properties set inline. */
+@keyframes confetti-burst {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) rotate(var(--rot)) scale(0.4);
+    opacity: 0;
+  }
+}
