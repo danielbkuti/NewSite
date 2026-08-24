@@ -94,6 +94,23 @@ class TaskModelTestCase(TestCase):
         self.assertFalse(task.completed)
         self.assertIsNone(task.dateCompleted)
 
+    def test_completing_subtask_sets_date_completed(self):
+        """SubTask.dateCompleted follows the same rules as
+        Task.dateCompleted — set on completion, cleared on reopening."""
+        task = Task.objects.create(user=self.user, name="Parent Task", status="pending")
+        sub = SubTask.objects.create(task=task, name="Sub1")
+        self.assertIsNone(sub.dateCompleted)
+
+        sub.completed = True
+        sub.save()
+        sub.refresh_from_db()
+        self.assertIsNotNone(sub.dateCompleted)
+
+        sub.completed = False
+        sub.save()
+        sub.refresh_from_db()
+        self.assertIsNone(sub.dateCompleted)
+
     def test_days_since_created_property(self):
         """Computed property should return integer."""
         task = Task.objects.create(

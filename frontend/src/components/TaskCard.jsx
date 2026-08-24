@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AddSubtaskForm } from '@/components/AddSubtaskForm'
 import { ConfettiBurst } from '@/components/ConfettiBurst'
-import { cn, formatDeadline, calculateProgress } from '@/lib/utils'
+import { cn, formatDeadline, calculateProgress, toDatetimeLocalValue, URGENT_WINDOW_MS } from '@/lib/utils'
 
 const PROGRESS_GRADIENT = 'bg-gradient-to-r from-[#e0c3fc] via-[#7c5fb0] to-[#8ec5fc]'
 // The hover-fill preview on the Pending button (see PendingCompleteButton).
@@ -15,6 +15,34 @@ const HOVER_FILL_MS = 350
 // name crossed out — before it's actually allowed to drop out of the
 // stack. Comfortably over 1 second per spec.
 const SUBTASK_CELEBRATION_MS = 1400
+
+function formatCountdown(ms) {
+  const clamped = Math.max(0, ms)
+  const totalSeconds = Math.floor(clamped / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+}
+
+// Live countdown to a deadline, active only inside URGENT_WINDOW_MS.
+// Ticks a few times a second while urgent for a visibly moving
+// counter; otherwise ticks slowly just to notice crossing into the
+// urgent window at all if the card is left open for a while.
+function useDeadlineCountdown(dateDeadline, completed) {
+  const deadlineMs = dateDeadline ? new Date(dateDeadline).getTime() : null
+  const [now, setNow] = useState(() => Date.now())
+  const remaining = deadlineMs !== null ? deadlineMs - now : null
+  const isUrgent = !completed && remaining !== null && remaining > 0 && remaining <= URGENT_WINDOW_MS
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), isUrgent ? 250 : 30000)
+    return () => clearInterval(id)
+  }, [isUrgent])
+
+  return { isUrgent, display: isUrgent ? formatCountdown(remaining) : null }
+}
 
 // Row pitch/height for the two states of the subtask stack: collapsed
 // (overlapping peek) vs. expanded (fully separated). Both are plain
@@ -45,12 +73,11 @@ const EXPANDED_PITCH = 48
 function SubtaskStackCard({ subtask, dimmed, justCompleted, style, onToggleComplete, onSetDeadline }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [editingDeadline, setEditingDeadline] = useState(false)
-  const [deadlineInput, setDeadlineInput] = useState(
-    subtask.dateDeadline ? subtask.dateDeadline.slice(0, 10) : ''
-  )
+  const [deadlineInput, setDeadlineInput] = useState(toDatetimeLocalValue(subtask.dateDeadline))
   const [busy, setBusy] = useState(false)
   const menuRef = useRef(null)
   const checked = subtask.completed || justCompleted
+  const countdown = useDeadlineCountdown(subtask.dateDeadline, checked)
 
   useEffect(() => {
     if (!menuOpen) return
@@ -128,11 +155,11 @@ function SubtaskStackCard({ subtask, dimmed, justCompleted, style, onToggleCompl
           className="flex shrink-0 items-center gap-1"
         >
           <input
-            type="date"
+            type="datetime-local"
             value={deadlineInput}
             onChange={(e) => setDeadlineInput(e.target.value)}
             autoFocus
-            className="h-6 w-28 rounded border border-input bg-transparent px-1 text-[11px] outline-none focus-visible:border-ring"
+            className="h-6 w-40 rounded border border-input bg-transparent px-1 text-[11px] outline-none focus-visible:border-ring"
           />
           <button type="submit" disabled={busy} className="font-medium text-emerald-700 hover:underline">
             Save
@@ -156,9 +183,16 @@ function SubtaskStackCard({ subtask, dimmed, justCompleted, style, onToggleCompl
               e.stopPropagation()
               setMenuOpen((v) => !v)
             }}
-            className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-100"
+            className={cn(
+              'rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums transition-colors',
+              countdown.isUrgent
+                ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+            )}
           >
-            Due {formatDeadline(subtask.dateDeadline)}
+            {countdown.isUrgent
+              ? `Due in: ${countdown.display}`
+              : `Due ${formatDeadline(subtask.dateDeadline)}`}
           </button>
           {menuOpen && (
             <div className="absolute top-full right-0 z-10 mt-1 w-40 overflow-hidden rounded-lg border bg-card py-1 shadow-lg">
@@ -267,9 +301,7 @@ export function TaskCard({
 }) {
   const navigate = useNavigate()
   const [editingDeadline, setEditingDeadline] = useState(false)
-  const [deadlineInput, setDeadlineInput] = useState(
-    task.dateDeadline ? task.dateDeadline.slice(0, 10) : ''
-  )
+  const [deadlineInput, setDeadlineInput] = useState(toDatetimeLocalValue(task.dateDeadline))
   const [deadlineError, setDeadlineError] = useState(null)
   const [savingDeadline, setSavingDeadline] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -332,6 +364,7 @@ export function TaskCard({
   }
 
   const progress = calculateProgress(task)
+  const countdown = useDeadlineCountdown(task.dateDeadline, task.completed)
 
   // Completing a task is gated on every subtask already being done —
   // this only blocks the pending -> completed direction; reopening an
@@ -418,10 +451,10 @@ export function TaskCard({
           ) : editingDeadline ? (
             <form onSubmit={handleDeadlineSubmit} className="flex items-center gap-2">
               <Input
-                type="date"
+                type="datetime-local"
                 value={deadlineInput}
                 onChange={(e) => setDeadlineInput(e.target.value)}
-                className="h-8 w-36"
+                className="h-8 w-52"
                 autoFocus
               />
               <Button type="submit" size="sm" disabled={savingDeadline}>
@@ -434,7 +467,7 @@ export function TaskCard({
                 onClick={() => {
                   setEditingDeadline(false)
                   setDeadlineError(null)
-                  setDeadlineInput(task.dateDeadline ? task.dateDeadline.slice(0, 10) : '')
+                  setDeadlineInput(toDatetimeLocalValue(task.dateDeadline))
                 }}
               >
                 Cancel
@@ -444,9 +477,18 @@ export function TaskCard({
             <button
               type="button"
               onClick={() => setEditingDeadline(true)}
-              className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+              className={cn(
+                'rounded-full px-3 py-1 text-xs font-medium tabular-nums transition-colors',
+                countdown.isUrgent
+                  ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                  : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+              )}
             >
-              {task.dateDeadline ? `Due ${formatDeadline(task.dateDeadline)}` : 'Set deadline'}
+              {countdown.isUrgent
+                ? `Due in: ${countdown.display}`
+                : task.dateDeadline
+                  ? `Due ${formatDeadline(task.dateDeadline)}`
+                  : 'Set deadline'}
             </button>
           )}
         </div>
