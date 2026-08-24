@@ -108,6 +108,7 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [confirmingClear, setConfirmingClear] = useState(false)
 
   const dateItems = buildDateItems(minDayOffset)
   const selectedDate = dayOffsetToDate(dayOffset)
@@ -138,6 +139,7 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
     } catch (err) {
       setError(err.data?.dateDeadline?.[0] ?? 'Could not update the deadline.')
       setSaving(false)
+      setConfirmingClear(false)
     }
   }
 
@@ -166,6 +168,29 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
 
       {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
 
+      {confirmingClear ? (
+        <div className="mt-3">
+          <p className="text-xs text-muted-foreground">Are you sure you want to clear the deadline?</p>
+          <div className="mt-2 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setConfirmingClear(false)}
+              disabled={saving}
+              className="text-xs text-muted-foreground hover:underline"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={saving}
+              className="text-xs font-medium text-destructive hover:underline"
+            >
+              {saving ? 'Clearing…' : 'Clear'}
+            </button>
+          </div>
+        </div>
+      ) : (
       <div className="mt-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
@@ -188,7 +213,7 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
         {value && (
           <button
             type="button"
-            onClick={handleClear}
+            onClick={() => setConfirmingClear(true)}
             disabled={saving}
             className="text-xs text-destructive hover:underline"
           >
@@ -196,6 +221,7 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
           </button>
         )}
       </div>
+      )}
     </div>
   )
 }

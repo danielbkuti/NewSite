@@ -59,12 +59,16 @@ export function SubtaskStackCard({
   style,
   onToggleComplete,
   onSetDeadline,
+  onDelete,
   partOf,
   pulseReady = true,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [editingDeadline, setEditingDeadline] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [busy, setBusy] = useState(false)
+  const deleteRef = useRef(null)
   const menuRef = useRef(null)
   const checked = subtask.completed || justCompleted
   const countdown = useDeadlineStatus(subtask.dateDeadline, checked)
@@ -79,6 +83,28 @@ export function SubtaskStackCard({
     document.addEventListener('mousedown', handleOutsideClick)
     return () => document.removeEventListener('mousedown', handleOutsideClick)
   }, [menuOpen])
+
+  useEffect(() => {
+    if (!confirmingDelete) return
+    function handleOutsideClick(e) {
+      if (deleteRef.current && !deleteRef.current.contains(e.target)) {
+        setConfirmingDelete(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [confirmingDelete])
+
+  async function handleDeleteConfirm(e) {
+    e.stopPropagation()
+    setDeleting(true)
+    try {
+      await onDelete()
+    } finally {
+      setDeleting(false)
+      setConfirmingDelete(false)
+    }
+  }
 
   async function handleMarkComplete(e) {
     e.stopPropagation()
@@ -182,6 +208,47 @@ export function SubtaskStackCard({
           )}
         </div>
       ) : null}
+
+      <div className="relative shrink-0" ref={deleteRef}>
+        {confirmingDelete ? (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-full right-0 z-20 mt-1 w-44 rounded-lg border bg-card p-2.5 text-left shadow-lg"
+          >
+            <p className="text-[11px] text-muted-foreground">Are you sure you want to delete this subtask?</p>
+            <div className="mt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(false)}
+                disabled={deleting}
+                className="text-[11px] text-muted-foreground hover:underline"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                disabled={deleting}
+                className="text-[11px] font-medium text-destructive hover:underline"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setConfirmingDelete(true)
+            }}
+            aria-label="Delete subtask"
+            className="text-muted-foreground transition-colors hover:text-destructive"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        )}
+      </div>
     </>
   )
 
@@ -300,6 +367,7 @@ export function TaskCard({
   onAddSubtask,
   onToggleSubtask,
   onSetSubtaskDeadline,
+  onDeleteSubtask,
   pulseReady = true,
 }) {
   const navigate = useNavigate()
@@ -474,13 +542,16 @@ export function TaskCard({
 
         <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
           {confirmingDelete ? (
-            <div className="flex items-center gap-1">
-              <Button size="sm" variant="destructive" onClick={handleDeleteConfirm} disabled={deleting}>
-                {deleting ? 'Deleting…' : 'Confirm'}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
-                Cancel
-              </Button>
+            <div className="flex flex-col items-end gap-1">
+              <p className="text-xs text-muted-foreground">Are you sure you want to delete this task?</p>
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="destructive" onClick={handleDeleteConfirm} disabled={deleting}>
+                  {deleting ? 'Deleting…' : 'Confirm'}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+                  Cancel
+                </Button>
+              </div>
             </div>
           ) : (
             <Button
@@ -489,6 +560,7 @@ export function TaskCard({
               variant="ghost"
               onClick={() => setConfirmingDelete(true)}
               aria-label="Delete task"
+              className="hover:text-destructive"
             >
               <Trash2 />
             </Button>
@@ -555,6 +627,7 @@ export function TaskCard({
                   }}
                   onToggleComplete={(checked) => handleToggleSubtaskComplete(subtask, checked)}
                   onSetDeadline={(dateDeadline) => onSetSubtaskDeadline(task, subtask, dateDeadline)}
+                  onDelete={() => onDeleteSubtask(task, subtask)}
                   pulseReady={pulseReady}
                 />
               ))}

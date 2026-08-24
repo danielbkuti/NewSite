@@ -11,12 +11,32 @@ const GRADIENT = 'bg-gradient-to-br from-[#e0c3fc] via-[#7c5fb0] to-[#8ec5fc]'
 
 const TASK_DETAIL_PATH = /^\/tasks\/(\d+)$/
 
+// Same per-concept colors as the home dashboard's own three cards
+// (Dashboard.jsx's ActionCard accents) — task/goal/calendar options
+// here mean the same thing those cards do, so they're given the same
+// color rather than inventing a second palette. Subtask borrows the
+// calendar's blue (no home-card equivalent of its own); deadline
+// matches the amber already used for due-date badges everywhere else
+// in the app; description keeps the plain purple every icon used to
+// be before this split.
+const COLOR_TASK = '#56a456'
+const COLOR_GOAL = '#7c5fb0'
+const COLOR_CALENDAR = '#4f9fdb'
+const COLOR_SUBTASK = '#4f9fdb'
+const COLOR_DEADLINE = '#b45309'
+const COLOR_DESCRIPTION = '#7c5fb0'
+
 // One option in the stack — a small card in its own right (icon badge
 // + label), not a grid cell, since these now hang above the FAB as a
 // vertical stack rather than sitting inside one bigger dialog card.
 // `riseDelay` staggers each card's entrance so the stack reads as
 // rising up from the button one after another, closest card first.
-function OptionCard({ icon: Icon, label, onClick, riseDelay }) {
+// The icon badge color is inline style rather than a Tailwind class —
+// `accent` is a runtime value, and Tailwind's JIT compiler only picks
+// up class names it can see literally in source, not ones assembled
+// from a variable — same reasoning Dashboard.jsx's ActionCard already
+// follows for its own per-card accent.
+function OptionCard({ icon: Icon, label, onClick, riseDelay, accent }) {
   return (
     <button
       type="button"
@@ -24,7 +44,10 @@ function OptionCard({ icon: Icon, label, onClick, riseDelay }) {
       style={{ animation: `fab-card-rise 220ms ease-out ${riseDelay}ms both` }}
       className="flex w-60 items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left shadow-lg transition-colors hover:bg-muted/50"
     >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#7c5fb0]/10 text-[#7c5fb0]">
+      <span
+        className="flex size-9 shrink-0 items-center justify-center rounded-full"
+        style={{ backgroundColor: `${accent}1a`, color: accent }}
+      >
         <Icon className="size-4.5" />
       </span>
       <span className="text-sm font-medium">{label}</span>
@@ -133,16 +156,16 @@ export function AddTaskFab() {
   }
 
   const defaultOptions = [
-    { key: 'task', label: 'Add a new task', icon: SquarePlus, onClick: () => goTo('/tasks/new') },
-    { key: 'goal', label: 'Add a new goal', icon: Target, onClick: () => goTo('/goals') },
-    { key: 'calendar', label: 'Add a calendar item', icon: CalendarDays, onClick: () => goTo('/calendar') },
+    { key: 'task', label: 'Add a new task', icon: SquarePlus, accent: COLOR_TASK, onClick: () => goTo('/tasks/new') },
+    { key: 'goal', label: 'Add a new goal', icon: Target, accent: COLOR_GOAL, onClick: () => goTo('/goals') },
+    { key: 'calendar', label: 'Add a calendar item', icon: CalendarDays, accent: COLOR_CALENDAR, onClick: () => goTo('/calendar') },
   ]
 
   const detailOptions = [
-    { key: 'subtask', label: 'Add a new subtask', icon: ListPlus, onClick: () => setActiveAction('subtask') },
-    { key: 'task', label: 'Add a new task', icon: SquarePlus, onClick: () => goTo('/tasks/new') },
-    { key: 'deadline', label: 'Set/Edit deadline', icon: CalendarClock, onClick: () => setActiveAction('deadline') },
-    { key: 'description', label: 'Add a task description', icon: FileText, onClick: () => setActiveAction('description') },
+    { key: 'subtask', label: 'Add a new subtask', icon: ListPlus, accent: COLOR_SUBTASK, onClick: () => setActiveAction('subtask') },
+    { key: 'task', label: 'Add a new task', icon: SquarePlus, accent: COLOR_TASK, onClick: () => goTo('/tasks/new') },
+    { key: 'deadline', label: 'Set/Edit deadline', icon: CalendarClock, accent: COLOR_DEADLINE, onClick: () => setActiveAction('deadline') },
+    { key: 'description', label: 'Add a task description', icon: FileText, accent: COLOR_DESCRIPTION, onClick: () => setActiveAction('description') },
   ]
 
   const options = taskId ? detailOptions : defaultOptions
@@ -167,6 +190,7 @@ export function AddTaskFab() {
                   label={option.label}
                   onClick={option.onClick}
                   riseDelay={index * 40}
+                  accent={option.accent}
                 />
               ))}
 
