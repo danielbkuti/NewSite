@@ -59,20 +59,16 @@ export function isDeadlineUrgent(iso, completed) {
 // baseline ordering until it exists.
 export const UPCOMING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Subtasks collectively count for 80% of the bar; the last 20% only
-// closes up when the task itself is explicitly checked off complete —
-// finishing every subtask does not do this automatically (see
-// Task.update_completion_status on the backend), so the last 20% is a
-// deliberate separate action, gated on every subtask already being
-// done. A task with no subtasks has no 80/20 split to make — its own
-// completion is the whole bar.
+// The task itself counts as one item alongside its subtasks, all
+// weighted equally — 1 subtask + the task = 2 items, so finishing the
+// one subtask (task not yet explicitly checked off complete — see
+// Task.update_completion_status on the backend, finishing every
+// subtask does not do that automatically) reads as 50%, not some
+// fixed fraction of a bar the task's own completion separately tops
+// off. A task with no subtasks has just the one item — its own
+// completion is the whole bar, 0% or 100%.
 export function calculateProgress(task) {
-  const total = task.subtasks.length;
-  if (total === 0) {
-    return task.completed ? 100 : 0;
-  }
-  const completed = task.subtasks.filter((s) => s.completed).length;
-  const subtaskShare = (completed / total) * 80;
-  const completionShare = task.completed ? 20 : 0;
-  return Math.round(subtaskShare + completionShare);
+  const totalItems = task.subtasks.length + 1;
+  const completedItems = task.subtasks.filter((s) => s.completed).length + (task.completed ? 1 : 0);
+  return Math.round((completedItems / totalItems) * 100);
 }

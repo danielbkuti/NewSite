@@ -287,14 +287,32 @@ export function SubtaskStackCard({
   // on top and the "Part of ..." jump-back tag inside the same
   // border, below it — not a separate floating line above the card.
   // Bare text + arrow, grey by default and blue only on hover, same
-  // hover-reveal restraint as the rest of the app's hint text.
+  // hover-reveal restraint as the rest of the app's hint text. Same
+  // glass-lustre surface + gradient border ring as the main TaskCard
+  // (see .task-glass/.task-ring in index.css) — this is the one place
+  // a subtask stands as its own list entry rather than living inside
+  // a task's cascade, so it gets the same "this is a real card"
+  // treatment. Ring accent follows the same rule: emerald once
+  // checked, red once overdue, the default app gradient otherwise —
+  // just keyed off this subtask's own status instead of a task's.
   return (
     <div
       className={cn(
-        'flex flex-col gap-2 rounded-lg border px-3 py-2 text-xs transition-all duration-300 ease-in-out',
+        'task-glass relative flex flex-col gap-2 rounded-lg px-3 py-2 text-xs transition-all duration-300 ease-in-out',
         dimmed ? 'bg-muted/60 text-muted-foreground shadow-none' : 'bg-card shadow-sm'
       )}
     >
+      <span
+        aria-hidden="true"
+        className="task-ring"
+        style={{
+          '--task-accent': checked
+            ? 'linear-gradient(135deg,#34d399,#059669)'
+            : countdown.isOverdue
+              ? 'linear-gradient(135deg,#ef4444,#b91c1c)'
+              : undefined,
+        }}
+      />
       <div className="flex items-center gap-2">{rowContent}</div>
       <button
         type="button"
@@ -736,39 +754,53 @@ export function TaskCard({
         </div>
       )}
 
-      {/* A task with no subtasks yet gets an invitation to add its
-          first one instead of a stack with nothing in it. */}
-      {task.subtasks.length === 0 && (
-        <div onClick={(e) => e.stopPropagation()}>
-          {addingSubtask ? (
-            <div className="mt-4">
-              <AddSubtaskForm
-                onAdd={(name, dateDeadline) => onAddSubtask(task, name, dateDeadline)}
-                onCancel={() => setAddingSubtask(false)}
-              />
-            </div>
-          ) : (
-            <p className="mt-4 text-xs text-muted-foreground">
-              Want to break this down into smaller chunks?{' '}
-              <button
-                type="button"
-                onClick={() => {
-                  // Same mutual-exclusion reasoning as the deadline
-                  // badge's own onClick above — this form is about to
-                  // grow its own deadline picker directly underneath
-                  // it, close enough to the task's own to overlap if
-                  // both were open together.
-                  setEditingDeadline(false)
-                  setAddingSubtask(true)
-                }}
-                className="font-medium text-sky-600 hover:text-sky-700 hover:underline"
-              >
-                Add subtasks
-              </button>
-            </p>
-          )}
-        </div>
-      )}
+      {/* Always somewhere to add a subtask, whether the task has none
+          yet (the inviting prompt) or already has some (a plain link
+          below the stack) — this used to be hard-gated behind
+          `task.subtasks.length === 0`, so the very first subtask
+          you added made this whole section (and the form with it)
+          disappear for good, with nothing on this card able to add a
+          second one. */}
+      <div onClick={(e) => e.stopPropagation()}>
+        {addingSubtask ? (
+          <div className="mt-4">
+            <AddSubtaskForm
+              onAdd={(name, dateDeadline) => onAddSubtask(task, name, dateDeadline)}
+              onCancel={() => setAddingSubtask(false)}
+            />
+          </div>
+        ) : task.subtasks.length === 0 ? (
+          <p className="mt-4 text-xs text-muted-foreground">
+            Want to break this down into smaller chunks?{' '}
+            <button
+              type="button"
+              onClick={() => {
+                // Same mutual-exclusion reasoning as the deadline
+                // badge's own onClick above — this form is about to
+                // grow its own deadline picker directly underneath
+                // it, close enough to the task's own to overlap if
+                // both were open together.
+                setEditingDeadline(false)
+                setAddingSubtask(true)
+              }}
+              className="font-medium text-sky-600 hover:text-sky-700 hover:underline"
+            >
+              Add subtasks
+            </button>
+          </p>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setEditingDeadline(false)
+              setAddingSubtask(true)
+            }}
+            className="mt-2 text-xs font-medium text-sky-600 hover:text-sky-700 hover:underline"
+          >
+            + Add another subtask
+          </button>
+        )}
+      </div>
     </div>
   )
 }

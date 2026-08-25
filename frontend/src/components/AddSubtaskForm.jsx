@@ -55,7 +55,7 @@ export function AddSubtaskForm({ onAdd, onCancel }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Add a subtask…"
-          className="h-8 flex-1 text-xs"
+          className="h-8 flex-1 bg-white text-xs"
           required
         />
         <Button type="submit" size="sm" disabled={adding}>
@@ -68,20 +68,30 @@ export function AddSubtaskForm({ onAdd, onCancel }) {
         )}
       </div>
 
-      <div className="relative w-fit">
+      <div>
         <button
           type="button"
           onClick={() => setEditingDeadline((v) => !v)}
           disabled={adding}
-          className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:pointer-events-none disabled:opacity-60"
+          className="w-fit rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:pointer-events-none disabled:opacity-60"
         >
           {dateDeadline ? `Due ${formatDeadline(dateDeadline)}` : 'Set deadline'}
         </button>
         {editingDeadline && (
+          // Flowed inline rather than the usual floating popover (see
+          // DeadlineEditor's own default `absolute` positioning) —
+          // this form can sit near the bottom of a short card (e.g. a
+          // task with no other subtasks yet), and a popover expanding
+          // downward from there has nowhere to go but over whatever's
+          // below in the page, which on the list view is the *next*
+          // task card. Flowing inline instead just grows the form (and
+          // the card around it) to fit, the same override AddTaskFab
+          // already used for its own non-floating case.
           <DeadlineEditor
             value={dateDeadline}
             onSave={handlePickDeadline}
             onCancel={() => setEditingDeadline(false)}
+            className="static mt-2 w-full shadow-none"
           />
         )}
       </div>
