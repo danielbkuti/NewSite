@@ -369,6 +369,9 @@ export function TaskCard({
   onSetSubtaskDeadline,
   onDeleteSubtask,
   pulseReady = true,
+  selectMode = false,
+  selected = false,
+  onSelectToggle,
 }) {
   const navigate = useNavigate()
   const [editingDeadline, setEditingDeadline] = useState(false)
@@ -476,13 +479,25 @@ export function TaskCard({
     // "was that a real link" from the event target.
     <div
       id={`task-${task.id}`}
-      onClick={() => navigate(`/tasks/${task.id}`)}
-      className="relative w-full cursor-pointer rounded-2xl border bg-card p-5 shadow-sm transition-shadow duration-500 hover:shadow-md"
+      onClick={() => (selectMode ? onSelectToggle?.() : navigate(`/tasks/${task.id}`))}
+      className={cn(
+        'relative w-full cursor-pointer rounded-2xl border bg-card p-5 shadow-sm transition-shadow duration-500 hover:shadow-md',
+        selected && 'ring-2 ring-sky-400'
+      )}
     >
       {celebrating && <ConfettiBurst />}
 
       {/* ---- header row: status toggle, name, due date, delete ---- */}
       <div className="flex items-center gap-4">
+        {selectMode && (
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => onSelectToggle?.()}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={selected ? 'Deselect task' : 'Select task'}
+            className="shrink-0"
+          />
+        )}
         <PendingCompleteButton task={task} blocked={blockedFromCompleting} onClick={handleToggleClick} />
 
         <span

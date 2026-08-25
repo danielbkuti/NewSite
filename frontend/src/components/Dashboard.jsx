@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { SquarePlus, Target, CalendarDays, Sparkles, Clock } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { TaskFeaturePreview } from '@/components/TaskFeaturePreview'
+import { PulseRing } from '@/components/PulseRing'
 import { cn } from '@/lib/utils'
-import { fetchTasks, updateTask, updateSubTask } from '@/lib/tasks'
+import { useDeadlineStatus } from '@/hooks/useDeadlineStatus'
+import { updateTask, updateSubTask } from '@/lib/tasks'
+import { useTaskStore } from '@/context/TaskStoreContext'
 
 function formatDeadline(iso) {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -74,11 +77,15 @@ function ActionCard({ to, icon: Icon, title, description, accent, preview }) {
 }
 
 // One row in the "Upcoming" list — a task or a subtask, both shaped
-// down to the same {kind, id, name, dateDeadline, completed, parentName}
-// shape so they can share a sorted list and a single row renderer.
+// down to the same {kind, id, taskId, name, dateDeadline, completed,
+// parentName} shape so they can share a sorted list and a single row
+// renderer. `taskId` is always the *task's* id (itself, for a task row;
+// its parent's, for a subtask row) since only tasks have their own
+// detail page — same convention as OverdueGateModal's item list.
 function UpcomingRow({ item, onToggle }) {
+  const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
-  const overdue = new Date(item.dateDeadline) < new Date()
+  const { isOverdue, isUrgent } = useDeadlineStatus(item.dateDeadline, item.completed)
 
   async function handleToggle(checked) {
     setBusy(true)
@@ -94,9 +101,20 @@ function UpcomingRow({ item, onToggle }) {
     // (flex-col, gap/padding driven by a --card-spacing token) are
     // meant for its vertical header/content layout, and fighting that
     // with overrides for a one-line horizontal row isn't worth the risk
-    // of a class not actually winning the merge.
-    <div className="flex items-center gap-3 rounded-xl bg-card px-4 py-3 text-sm ring-1 ring-foreground/10">
-      <Checkbox checked={item.completed} onCheckedChange={handleToggle} disabled={busy} />
+    // of a class not actually winning the merge. Clicking the row opens
+    // the underlying task's detail page — same "whole row navigates,
+    // interactive controls opt out with stopPropagation" convention as
+    // TaskCard; the checkbox is the only control here.
+    <div
+      onClick={() => navigate(`/tasks/${item.taskId}`)}
+      className="flex cursor-pointer items-center gap-3 rounded-xl bg-card px-4 py-3 text-sm ring-1 ring-foreground/10 transition-colors hover:bg-accent/50"
+    >
+      <Checkbox
+        checked={item.completed}
+        onCheckedChange={handleToggle}
+        onClick={(e) => e.stopPropagation()}
+        disabled={busy}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-sm font-medium">{item.name}</span>
         {item.kind === 'subtask' && (
@@ -105,32 +123,20 @@ function UpcomingRow({ item, onToggle }) {
           </span>
         )}
       </div>
-      <Badge variant={overdue ? 'destructive' : 'outline'} className="shrink-0 gap-1">
-        <Clock className="size-3" />
-        {overdue ? 'Overdue' : formatDeadline(item.dateDeadline)}
-      </Badge>
+      <div className="relative shrink-0">
+        {(isOverdue || isUrgent) && <PulseRing />}
+        <Badge variant={isOverdue ? 'destructive' : 'outline'} className="relative gap-1">
+          <Clock className="size-3" />
+          {isOverdue ? 'Overdue' : formatDeadline(item.dateDeadline)}
+        </Badge>
+      </div>
     </div>
   )
 }
 
 export function Dashboard({ firstName, username }) {
-  const [status, setStatus] = useState('loading')
-  const [tasks, setTasks] = useState([])
+  const { tasks, status, refreshTasks } = useTaskStore()
   const displayName = firstName || username || 'there'
-
-  function loadTasks() {
-    return fetchTasks()
-      .then((data) => {
-        setTasks(data.results)
-        setStatus('ready')
-      })
-      .catch(() => setStatus('error'))
-  }
-
-  useEffect(() => {
-    loadTasks()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // Flattens tasks + their subtasks into one list of not-yet-done items
   // that actually have a deadline, sorted soonest-first. A task whose
@@ -144,6 +150,7 @@ export function Dashboard({ firstName, username }) {
         items.push({
           kind: 'task',
           id: task.id,
+          taskId: task.id,
           name: task.name,
           dateDeadline: task.dateDeadline,
           completed: task.completed,
@@ -154,6 +161,7 @@ export function Dashboard({ firstName, username }) {
           items.push({
             kind: 'subtask',
             id: subtask.id,
+            taskId: task.id,
             name: subtask.name,
             dateDeadline: subtask.dateDeadline,
             completed: subtask.completed,
@@ -177,7 +185,7 @@ export function Dashboard({ firstName, username }) {
     } else {
       await updateSubTask(item.id, { completed: checked })
     }
-    await loadTasks()
+    await refreshTasks()
   }
 
   return (
@@ -210,7 +218,12 @@ export function Dashboard({ firstName, username }) {
       </div>
 
       <div className="mt-12">
-        <h2 className="mb-4 text-xl font-semibold tracking-tight">Upcoming</h2>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl font-semibold tracking-tight">Upcoming</h2>
+          <Link to="/tasks" className="text-xs font-medium text-sky-600 hover:underline">
+            View all tasks →
+          </Link>
+        </div>
 
         {status === 'loading' && (
           <p className="text-sm text-muted-foreground">Loading…</p>

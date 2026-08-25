@@ -3,9 +3,10 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Trash2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
-import { fetchTask, updateTask, deleteTask, createSubTask, updateSubTask } from '@/lib/tasks'
+import { updateTask, deleteTask, createSubTask, updateSubTask, deleteSubTask } from '@/lib/tasks'
 import { cn, formatDeadline, calculateProgress, isDeadlineUrgent } from '@/lib/utils'
 import { useDeadlineStatus } from '@/hooks/useDeadlineStatus'
+import { useTaskStore } from '@/context/TaskStoreContext'
 import { DeadlineEditor } from '@/components/DeadlineEditor'
 import { AddSubtaskForm } from '@/components/AddSubtaskForm'
 import { InlineEditableName } from '@/components/InlineEditableName'
@@ -42,9 +43,18 @@ const COMPLETED_SUBTASK_PREVIEW_COUNT = 3
 // to the very bottom of the whole list.
 export function TaskDetailPage() {
   const { id } = useParams()
+  const numericId = Number(id)
   const navigate = useNavigate()
-  const [status, setStatus] = useState('loading')
-  const [task, setTask] = useState(null)
+  // Reads the task straight out of the shared store rather than
+  // keeping its own independent copy — this is what makes the FAB's
+  // detail-page actions (add subtask, set deadline, add description)
+  // show up here without a full page reload: the FAB mutates through
+  // the same store, so this page just re-renders. `status` mirrors the
+  // store's own loading/error state; a task genuinely missing from an
+  // already-`ready` store (deleted elsewhere, wrong id, not yours) is
+  // handled separately below, not as a loading state.
+  const { tasks, status, mergeTask, removeTask, refreshTask } = useTaskStore()
+  const task = tasks.find((t) => t.id === numericId) ?? null
   const [busyIds, setBusyIds] = useState(() => new Set())
   // Subtask ids mid-celebration — kept sorted as "not yet done" until
   // their timer clears, so checking one off doesn't instantly jump it.
@@ -67,16 +77,6 @@ export function TaskDetailPage() {
   // rows on this page: this is the one place the app shows a genuinely
   // ticking "how overdue" duration, in days once it runs past 24h.
   const deadlineStatus = useDeadlineStatus(task?.dateDeadline, task?.completed, { liveOverdue: true })
-
-  useEffect(() => {
-    setStatus('loading')
-    fetchTask(id)
-      .then((data) => {
-        setTask(data)
-        setStatus('ready')
-      })
-      .catch(() => setStatus('error'))
-  }, [id])
 
   // One-time check, the moment the task first loads: if the task or any
   // of its still-open subtasks is close to its deadline, briefly nudge
@@ -116,21 +116,24 @@ export function TaskDetailPage() {
   // /tasks list's cascade could.
   async function handleAddSubtask(name) {
     await createSubTask({ task: id, name })
-    const fresh = await fetchTask(id)
-    setTask(fresh)
+    await refreshTask(id)
   }
 
   // Rename the task or a subtask — neither was possible anywhere in
   // the app until now, only creating and (for the task) deleting.
   async function handleRenameTask(name) {
     const updated = await updateTask(id, { name })
-    setTask((current) => ({ ...current, ...updated }))
+    mergeTask({ ...task, ...updated })
   }
 
   async function handleRenameSubtask(subtask, name) {
     await updateSubTask(subtask.id, { name })
-    const fresh = await fetchTask(id)
-    setTask(fresh)
+    await refreshTask(id)
+  }
+
+  async function handleDeleteSubtask(subtask) {
+    await deleteSubTask(subtask.id)
+    await refreshTask(id)
   }
 
   // This is the one place completing a task with open subtasks is
@@ -151,8 +154,7 @@ export function TaskDetailPage() {
       }
     }
     await updateTask(id, { completed: next })
-    const fresh = await fetchTask(id)
-    setTask(fresh)
+    await refreshTask(id)
   }
 
   async function handleDeleteConfirm() {
@@ -160,6 +162,7 @@ export function TaskDetailPage() {
     setDeleting(true)
     try {
       await deleteTask(id)
+      removeTask(numericId)
       navigate('/tasks')
     } catch (err) {
       setDeleteError(err.data?.detail ?? 'Could not delete this task.')
@@ -189,8 +192,7 @@ export function TaskDetailPage() {
       // which this page also displays (see the progress-vs-complete
       // bubble below), so the authoritative task is worth pulling back
       // down instead of guessing at the side effect here.
-      const fresh = await fetchTask(id)
-      setTask(fresh)
+      await refreshTask(id)
     } finally {
       setBusyIds((current) => {
         const next = new Set(current)
@@ -206,7 +208,7 @@ export function TaskDetailPage() {
   // than assuming the optimistic input round-trips unchanged.
   async function handleDeadlineSave(dateDeadline) {
     const updated = await updateTask(id, { dateDeadline })
-    setTask((current) => ({ ...current, ...updated }))
+    mergeTask({ ...task, ...updated })
     setEditingDeadline(false)
   }
 
@@ -222,6 +224,20 @@ export function TaskDetailPage() {
     return (
       <div className="mx-auto max-w-3xl px-8 py-8">
         <p className="text-sm text-destructive">Couldn&apos;t load this task.</p>
+        <Link to="/tasks" className="mt-2 inline-block text-sm text-sky-600 hover:underline">
+          Back to tasks
+        </Link>
+      </div>
+    )
+  }
+
+  // The store has loaded but this id isn't in it — deleted from
+  // another tab/page, or just a bad id. Same shape as the error state
+  // above rather than getting stuck on "Loading…" forever.
+  if (!task) {
+    return (
+      <div className="mx-auto max-w-3xl px-8 py-8">
+        <p className="text-sm text-destructive">Couldn&apos;t find this task.</p>
         <Link to="/tasks" className="mt-2 inline-block text-sm text-sky-600 hover:underline">
           Back to tasks
         </Link>
@@ -417,6 +433,7 @@ export function TaskDetailPage() {
                 busy={busyIds.has(subtask.id)}
                 onToggle={(value) => handleToggleSubtask(subtask, value)}
                 onRename={(name) => handleRenameSubtask(subtask, name)}
+                onDelete={() => handleDeleteSubtask(subtask)}
               />
             )
           }}
@@ -456,8 +473,35 @@ export function TaskDetailPage() {
 // "Overdue" badge + the plain due date is enough there), the detail
 // page is where someone's actually looking at one task, so the "how
 // overdue" duration ticks for real, in days once it runs past 24h.
-function SubtaskDetailRow({ subtask, checked, busy, onToggle, onRename }) {
+function SubtaskDetailRow({ subtask, checked, busy, onToggle, onRename, onDelete }) {
   const status = useDeadlineStatus(subtask.dateDeadline, checked, { liveOverdue: true })
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const deleteRef = useRef(null)
+
+  // Same "click outside closes it" behavior as the list view's own
+  // subtask delete confirm (SubtaskStackCard) — this was the one place
+  // in the app that still had no delete-subtask UI at all.
+  useEffect(() => {
+    if (!confirmingDelete) return
+    function handleOutsideClick(e) {
+      if (deleteRef.current && !deleteRef.current.contains(e.target)) {
+        setConfirmingDelete(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [confirmingDelete])
+
+  async function handleDeleteConfirm() {
+    setDeleting(true)
+    try {
+      await onDelete()
+    } finally {
+      setDeleting(false)
+      setConfirmingDelete(false)
+    }
+  }
 
   return (
     <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm transition-colors duration-300">
@@ -491,6 +535,41 @@ function SubtaskDetailRow({ subtask, checked, busy, onToggle, onRename }) {
             Due {formatDeadline(subtask.dateDeadline)}
           </span>
         ))}
+
+      <div className="relative shrink-0" ref={deleteRef}>
+        {confirmingDelete ? (
+          <div className="absolute top-full right-0 z-20 mt-1 w-44 rounded-lg border bg-card p-2.5 text-left shadow-lg">
+            <p className="text-[11px] text-muted-foreground">Are you sure you want to delete this subtask?</p>
+            <div className="mt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(false)}
+                disabled={deleting}
+                className="text-[11px] text-muted-foreground hover:underline"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                disabled={deleting}
+                className="text-[11px] font-medium text-destructive hover:underline"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmingDelete(true)}
+            aria-label="Delete subtask"
+            className="text-muted-foreground transition-colors hover:text-destructive"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        )}
+      </div>
     </div>
   )
 }
