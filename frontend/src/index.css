@@ -172,3 +172,52 @@
     opacity: 0.85;
   }
 }
+
+/* --- TaskCard: gradient border ring -------------------------------------
+   A 3px border painted with the app's PROGRESS_GRADIENT (or a status
+   gradient) rather than a flat colour. Uses a padding-box/border-box mask
+   pair so only the border area shows the gradient and the card's own
+   surface stays clean — border-image can't do rounded corners. Sits as an
+   overlay so it doesn't participate in layout. Colour comes from
+   --task-accent, set inline per card. */
+.task-ring {
+  --task-accent: linear-gradient(135deg, #e0c3fc 0%, #7c5fb0 50%, #8ec5fc 100%);
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 3px;
+  background: var(--task-accent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.7),
+    inset 0 -1px 0 rgb(255 255 255 / 0.35);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+/* --- TaskCard: glass lustre --------------------------------------------
+   Two soft directional washes over the card surface, in the same two
+   gradient stops the progress bar already uses. Layered under the card's
+   own background colour so dark mode still resolves to bg-card. */
+.task-glass {
+  background-image:
+    linear-gradient(152deg, rgb(255 255 255 / 0.9) 0%, rgb(224 195 252 / 0.3) 22%, rgb(255 255 255 / 0) 58%),
+    linear-gradient(300deg, rgb(142 197 252 / 0.22) 0%, rgb(255 255 255 / 0) 42%);
+}
+
+/* --- TaskCard: progress sheen ------------------------------------------
+   A highlight that sweeps along the filled portion of an in-progress bar.
+   Runs only while 0 < progress < 100 (gated in JSX). */
+@keyframes progress-sheen {
+  0% { transform: translateX(-100%); }
+  60%, 100% { transform: translateX(240%); }
+}
+.animate-progress-sheen {
+  animation: progress-sheen 2.4s ease-in-out infinite;
+}

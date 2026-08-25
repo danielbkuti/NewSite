@@ -273,7 +273,7 @@ export function SubtaskStackCard({
       <div
         className={cn(
           'absolute inset-x-0 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-all duration-300 ease-in-out',
-          dimmed ? 'bg-muted/60 text-muted-foreground' : 'bg-card shadow-sm'
+          dimmed ? 'bg-muted/60 text-muted-foreground shadow-none' : 'bg-card shadow-sm'
         )}
         style={style}
       >
@@ -292,7 +292,7 @@ export function SubtaskStackCard({
     <div
       className={cn(
         'flex flex-col gap-2 rounded-lg border px-3 py-2 text-xs transition-all duration-300 ease-in-out',
-        dimmed ? 'bg-muted/60 text-muted-foreground' : 'bg-card shadow-sm'
+        dimmed ? 'bg-muted/60 text-muted-foreground shadow-none' : 'bg-card shadow-sm'
       )}
     >
       <div className="flex items-center gap-2">{rowContent}</div>
@@ -517,10 +517,26 @@ export function TaskCard({
       id={`task-${task.id}`}
       onClick={() => (selectMode ? onSelectToggle?.() : navigate(`/tasks/${task.id}`))}
       className={cn(
-        'relative w-full cursor-pointer rounded-2xl border bg-card p-5 shadow-sm transition-shadow duration-500 hover:shadow-md',
+        'task-glass relative w-full cursor-pointer rounded-2xl bg-card p-5 shadow-sm',
+        'transition-[transform,box-shadow] duration-300 ease-out',
+        'hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-18px_rgba(124,95,176,0.38)]',
         selected && 'ring-2 ring-sky-400'
       )}
     >
+      {/* Gradient border ring — purely decorative overlay, replaces the flat
+          `border`. Accent tracks status: the app gradient normally, red when
+          overdue, emerald once completed. */}
+      <span
+        aria-hidden="true"
+        className="task-ring"
+        style={{
+          '--task-accent': task.completed
+            ? 'linear-gradient(135deg,#34d399,#059669)'
+            : countdown.isOverdue
+              ? 'linear-gradient(135deg,#ef4444,#b91c1c)'
+              : undefined,
+        }}
+      />
       {celebrating && <ConfettiBurst />}
 
       {/* ---- header row: status toggle, name, due date, delete ---- */}
@@ -637,11 +653,21 @@ export function TaskCard({
             Complete all subtasks to mark this task done.
           </div>
         )}
-        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-2 w-full overflow-hidden rounded-full border border-border bg-muted">
           <div
-            className={cn('h-full rounded-full transition-all duration-500 ease-out', PROGRESS_GRADIENT)}
+            className={cn(
+              'relative h-full overflow-hidden rounded-full transition-all duration-500 ease-out',
+              PROGRESS_GRADIENT
+            )}
             style={{ width: `${progress}%` }}
-          />
+          >
+            {progress > 0 && progress < 100 && (
+              <span
+                aria-hidden="true"
+                className="animate-progress-sheen absolute inset-y-0 w-2/5 bg-gradient-to-r from-transparent via-white/70 to-transparent"
+              />
+            )}
+          </div>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">{progress}% complete</p>
       </div>
