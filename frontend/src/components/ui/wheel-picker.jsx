@@ -45,6 +45,27 @@ export function WheelPicker({ items, value, onChange, itemHeight = 40, visibleCo
 
   useEffect(() => () => clearTimeout(scrollTimeoutRef.current), [])
 
+  // Up/Down move one row at a time; Home/End jump to the first/last —
+  // same clamped-not-wrapping behavior as scrolling past either end.
+  // Changing `value` here is enough to also move the scroll position:
+  // it flows back through the controlled `value` -> the sync effect
+  // above -> a smooth `scrollTo`, same path a click on a row takes.
+  function handleKeyDown(e) {
+    if (items.length === 0) return
+    const currentIndex = Math.max(0, selectedIndex)
+    let nextIndex = null
+    if (e.key === 'ArrowUp') nextIndex = currentIndex - 1
+    else if (e.key === 'ArrowDown') nextIndex = currentIndex + 1
+    else if (e.key === 'Home') nextIndex = 0
+    else if (e.key === 'End') nextIndex = items.length - 1
+    else return
+
+    e.preventDefault()
+    const clamped = Math.min(items.length - 1, Math.max(0, nextIndex))
+    const item = items[clamped]
+    if (item && item.value !== value) onChange(item.value)
+  }
+
   return (
     <div className={cn('relative', className)} style={{ height: itemHeight * visibleCount }}>
       <div
@@ -55,8 +76,10 @@ export function WheelPicker({ items, value, onChange, itemHeight = 40, visibleCo
       <div
         ref={containerRef}
         onScroll={handleScroll}
+        onKeyDown={handleKeyDown}
+        tabIndex={0}
         role="listbox"
-        className="relative h-full overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="relative h-full overflow-y-auto rounded-md outline-none [-ms-overflow-style:none] [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-ring/50 [&::-webkit-scrollbar]:hidden"
         style={{
           scrollSnapType: 'y mandatory',
           paddingTop: padding,

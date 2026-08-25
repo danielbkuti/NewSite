@@ -17,6 +17,11 @@ const HOVER_FILL_MS = 350
 // name crossed out — before it's actually allowed to drop out of the
 // stack. Comfortably over 1 second per spec.
 const SUBTASK_CELEBRATION_MS = 1400
+// How long `justSavedDeadline` stays true after a save — just needs to
+// clear the single pulse PulseRing plays off that true edge (1s) with
+// a little room to spare, so a later unrelated re-render doesn't find
+// it still true and think a save just happened again.
+const PULSE_CONFIRM_MS = 1200
 
 // Row pitch/height for the two states of the subtask stack: collapsed
 // (overlapping peek) vs. expanded (fully separated). Both are plain
@@ -68,6 +73,11 @@ export function SubtaskStackCard({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Flipped true right after a successful deadline save, then back to
+  // false a moment later — PulseRing uses the true edge to fire one
+  // confirming pulse, independent of whether the new deadline is
+  // actually urgent/overdue.
+  const [justSavedDeadline, setJustSavedDeadline] = useState(false)
   const deleteRef = useRef(null)
   const menuRef = useRef(null)
   const checked = subtask.completed || justCompleted
@@ -131,6 +141,8 @@ export function SubtaskStackCard({
   async function handleDeadlineSave(dateDeadline) {
     await onSetDeadline(dateDeadline)
     setEditingDeadline(false)
+    setJustSavedDeadline(true)
+    setTimeout(() => setJustSavedDeadline(false), PULSE_CONFIRM_MS)
   }
 
   const rowContent = (
@@ -161,7 +173,7 @@ export function SubtaskStackCard({
         </div>
       ) : subtask.dateDeadline ? (
         <div className="relative shrink-0" ref={menuRef}>
-          {(countdown.isOverdue || countdown.isUrgent) && <PulseRing ready={pulseReady} />}
+          <PulseRing ready={(countdown.isOverdue || countdown.isUrgent) && pulseReady} forceOnce={justSavedDeadline} />
           <button
             type="button"
             onClick={(e) => {
@@ -403,6 +415,11 @@ export function TaskCard({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
+  // Flipped true right after a successful deadline save, then back to
+  // false a moment later — PulseRing uses the true edge to fire one
+  // confirming pulse, independent of whether the new deadline is
+  // actually urgent/overdue.
+  const [justSavedDeadline, setJustSavedDeadline] = useState(false)
 
   async function handleDeleteConfirm() {
     setDeleteError(null)
@@ -419,6 +436,8 @@ export function TaskCard({
   async function handleDeadlineSave(dateDeadline) {
     await onSetDeadline(task, dateDeadline)
     setEditingDeadline(false)
+    setJustSavedDeadline(true)
+    setTimeout(() => setJustSavedDeadline(false), PULSE_CONFIRM_MS)
   }
 
   const progress = calculateProgress(task)
@@ -530,7 +549,7 @@ export function TaskCard({
             </div>
           ) : (
             <span className="relative inline-flex">
-              {(countdown.isOverdue || countdown.isUrgent) && <PulseRing ready={pulseReady} />}
+              <PulseRing ready={(countdown.isOverdue || countdown.isUrgent) && pulseReady} forceOnce={justSavedDeadline} />
               <button
                 type="button"
                 onClick={() => setEditingDeadline(true)}
@@ -672,7 +691,10 @@ export function TaskCard({
         <div onClick={(e) => e.stopPropagation()}>
           {addingSubtask ? (
             <div className="mt-4">
-              <AddSubtaskForm onAdd={(name) => onAddSubtask(task, name)} />
+              <AddSubtaskForm
+                onAdd={(name) => onAddSubtask(task, name)}
+                onCancel={() => setAddingSubtask(false)}
+              />
             </div>
           ) : (
             <p className="mt-4 text-xs text-muted-foreground">

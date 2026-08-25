@@ -29,6 +29,11 @@ const TASK_CELEBRATION_MS = 1300
 // fading — it's a one-time heads-up on opening the page, not a
 // persistent banner.
 const DEADLINE_HINT_MS = 5000
+// How long `justSavedDeadline` stays true after a save — just needs to
+// clear the single pulse PulseRing plays off that true edge (1s) with
+// a little room to spare, so a later unrelated re-render doesn't find
+// it still true and think a save just happened again.
+const PULSE_CONFIRM_MS = 1200
 // Same cap as the main task list's Completed section — only the
 // freshest few completed subtasks show here, the rest live on
 // /progress alongside every other completed task/subtask.
@@ -70,6 +75,11 @@ export function TaskDetailPage() {
   const [deleteError, setDeleteError] = useState(null)
   const [editingDeadline, setEditingDeadline] = useState(false)
   const [addingSubtask, setAddingSubtask] = useState(false)
+  // Flipped true right after a successful deadline save, then back to
+  // false a moment later — PulseRing uses the true edge to fire one
+  // confirming pulse, independent of whether the new deadline is
+  // actually overdue/urgent.
+  const [justSavedDeadline, setJustSavedDeadline] = useState(false)
   // Safe to call unconditionally with an as-yet-null task (dateDeadline
   // undefined just means "no deadline", same as the loaded case) —
   // has to run before the loading/error early returns below since
@@ -210,6 +220,8 @@ export function TaskDetailPage() {
     const updated = await updateTask(id, { dateDeadline })
     mergeTask({ ...task, ...updated })
     setEditingDeadline(false)
+    setJustSavedDeadline(true)
+    setTimeout(() => setJustSavedDeadline(false), PULSE_CONFIRM_MS)
   }
 
   if (status === 'loading') {
@@ -374,7 +386,7 @@ export function TaskDetailPage() {
         ) : (
           <div className="flex flex-col items-end gap-0.5">
             <span className="relative inline-flex">
-              {deadlineStatus.isOverdue && <PulseRing />}
+              <PulseRing ready={deadlineStatus.isOverdue} forceOnce={justSavedDeadline} />
               <button
                 type="button"
                 onClick={() => setEditingDeadline(true)}
@@ -408,7 +420,7 @@ export function TaskDetailPage() {
       {!hasSubtasks ? (
         <div className="mt-8">
           {addingSubtask ? (
-            <AddSubtaskForm onAdd={handleAddSubtask} />
+            <AddSubtaskForm onAdd={handleAddSubtask} onCancel={() => setAddingSubtask(false)} />
           ) : (
             <p className="text-sm text-muted-foreground">
               Want to break this down into smaller chunks?{' '}

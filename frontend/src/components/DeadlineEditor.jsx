@@ -1,15 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { WheelPicker } from '@/components/ui/wheel-picker'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 // Wheel range: 90 days back (room to backdate/correct) to a year
-// ahead. Whole-day rows — the date wheel picks a day, not an instant;
-// the optional time wheel below layers precision on top of that.
+// ahead — same bounds the old single date wheel enforced, just now
+// expressed as a min/max Date the day/month/year wheels are each kept
+// inside of (see buildDayItems/buildMonthItems/buildYearItems below)
+// rather than one linear offset.
 const MIN_DAY_OFFSET = -90
 const MAX_DAY_OFFSET = 365
-const TIME_STEP_MINUTES = 15
+
+function pad2(n) {
+  return String(n).padStart(2, '0')
+}
 
 function startOfLocalDay(date) {
   const copy = new Date(date)
@@ -17,59 +22,32 @@ function startOfLocalDay(date) {
   return copy
 }
 
-function dayOffsetToDate(offset) {
-  return new Date(startOfLocalDay(new Date()).getTime() + offset * DAY_MS)
-}
-
-function dateToDayOffset(date) {
-  const diff = startOfLocalDay(date).getTime() - startOfLocalDay(new Date()).getTime()
-  return Math.round(diff / DAY_MS)
+function addDays(date, days) {
+  return new Date(date.getTime() + days * DAY_MS)
 }
 
 function clamp(n, min, max) {
   return Math.min(max, Math.max(min, n))
 }
 
-// "Today" / "Tomorrow" read better than a bare date in a picker column
-// — everything further out falls back to a short weekday + date, with
-// the year only when it isn't the current one.
-function formatWheelDateLabel(offset) {
-  if (offset === 0) return 'Today'
-  if (offset === 1) return 'Tomorrow'
-  if (offset === -1) return 'Yesterday'
-  const date = dayOffsetToDate(offset)
-  const sameYear = date.getFullYear() === new Date().getFullYear()
-  return date.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: sameYear ? undefined : 'numeric',
-  })
+function daysInMonth(year, month) {
+  // `month` here is 1-indexed (1 = January); passing it straight as
+  // the (0-indexed) month argument to `Date` lands one calendar month
+  // ahead, and day 0 of that month is the last day of the one before
+  // it — i.e. exactly the month we actually asked about.
+  return new Date(year, month, 0).getDate()
 }
 
-function formatWheelTimeLabel(minutes) {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  const period = h >= 12 ? 'PM' : 'AM'
-  const h12 = h % 12 === 0 ? 12 : h % 12
-  return `${h12}:${String(m).padStart(2, '0')} ${period}`
-}
+const MONTH_LABELS = Array.from({ length: 12 }, (_, i) =>
+  new Date(2000, i, 1).toLocaleDateString(undefined, { month: 'short' })
+)
 
-function buildDateItems(minDayOffset) {
-  const items = []
-  for (let offset = minDayOffset; offset <= MAX_DAY_OFFSET; offset++) {
-    items.push({ value: offset, label: formatWheelDateLabel(offset) })
-  }
-  return items
-}
-
-const TIME_ITEMS = (() => {
-  const items = []
-  for (let minutes = 0; minutes <= 1425; minutes += TIME_STEP_MINUTES) {
-    items.push({ value: minutes, label: formatWheelTimeLabel(minutes) })
-  }
-  return items
-})()
+const MINUTE_ITEMS = Array.from({ length: 60 }, (_, m) => ({ value: m, label: pad2(m) }))
+const HOUR_ITEMS = Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: String(i + 1) }))
+const PERIOD_ITEMS = [
+  { value: 'AM', label: 'AM' },
+  { value: 'PM', label: 'PM' },
+]
 
 // Apple-style vertical wheel picker for editing a task or subtask
 // deadline — shared by every place that happens: TaskCard's own
@@ -77,49 +55,126 @@ const TIME_ITEMS = (() => {
 // the task detail page. Time-of-day is opt-in via the checkbox —
 // unchecked, the deadline lands on the selected date at local
 // midnight (same convention date-only deadlines already used before
-// time-of-day support existed); checked, a second wheel picks the
+// time-of-day support existed); checked, three more wheels pick the
 // time. Always renders as a self-contained floating popover, since
 // every call site opens it the same way: a trigger badge toggles it
 // into view without disturbing the rest of the layout underneath.
 //
-// `minDayOffset` defaults to letting you backdate up to 90 days, which
-// is what the backend actually allows for a *subtask* deadline — but a
-// *task* deadline is rejected outright if it's in the past (even
-// resubmitting an already-past one unchanged), so both task-level call
-// sites pass `minDayOffset={0}` to keep the wheel from ever landing on
-// a value Save can't possibly accept. That also means an already-
-// overdue task's editor opens on today, not its stale past deadline —
-// correct, since the only thing Save can do here is set a new one.
+// Six independent wheels rather than one combined date wheel and one
+// combined time wheel: day/month/year, and (when time's on)
+// hour/minute/AM-PM. `minDayOffset` defaults to letting you backdate
+// up to 90 days, which is what the backend actually allows for a
+// *subtask* deadline — but a *task* deadline is rejected outright if
+// it's in the past (even resubmitting an already-past one unchanged),
+// so both task-level call sites pass `minDayOffset={0}` to keep the
+// wheels from ever landing on a value Save can't possibly accept. The
+// day/month/year wheels enforce this by construction — their item
+// lists are built from `minDate`/`maxDate` and narrow at the boundary
+// years/months (see buildDayItems/buildMonthItems) — so every
+// selectable combination is already in range; there's nothing left to
+// clamp at Save time the way the old single offset wheel needed to.
+// Time-of-day isn't similarly bounded (same as before): picking a time
+// earlier than "now" on today's date just surfaces the backend's own
+// validation error, exactly like it always has.
 export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffset = MIN_DAY_OFFSET }) {
   const initial = value ? new Date(value) : new Date()
   const initialHasTime = Boolean(value) && (initial.getHours() !== 0 || initial.getMinutes() !== 0)
 
-  const [dayOffset, setDayOffset] = useState(() =>
-    clamp(dateToDayOffset(initial), minDayOffset, MAX_DAY_OFFSET)
-  )
+  const today = startOfLocalDay(new Date())
+  const minDate = addDays(today, minDayOffset)
+  const maxDate = addDays(today, MAX_DAY_OFFSET)
+
+  function clampToRange(date) {
+    if (date < minDate) return minDate
+    if (date > maxDate) return maxDate
+    return date
+  }
+
+  const clampedInitial = clampToRange(startOfLocalDay(initial))
+  const [year, setYear] = useState(() => clampedInitial.getFullYear())
+  const [month, setMonth] = useState(() => clampedInitial.getMonth() + 1)
+  const [day, setDay] = useState(() => clampedInitial.getDate())
+
   const [hasTime, setHasTime] = useState(initialHasTime)
-  // Rounded to the wheel's own step at init — otherwise an existing
-  // deadline whose minutes aren't a multiple of 15 (most of them,
-  // realistically) renders a few minutes off from where the wheel
-  // itself lands, until the user actually scrolls it once.
-  const [minutes, setMinutes] = useState(() => {
-    const raw = initial.getHours() * 60 + initial.getMinutes()
-    return Math.round(raw / TIME_STEP_MINUTES) * TIME_STEP_MINUTES
+  const [hour12, setHour12] = useState(() => {
+    const h24 = initial.getHours()
+    return h24 % 12 === 0 ? 12 : h24 % 12
   })
+  const [minute, setMinute] = useState(() => initial.getMinutes())
+  const [period, setPeriod] = useState(() => (initial.getHours() >= 12 ? 'PM' : 'AM'))
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [confirmingClear, setConfirmingClear] = useState(false)
 
-  const dateItems = buildDateItems(minDayOffset)
-  const selectedDate = dayOffsetToDate(dayOffset)
+  function buildYearItems() {
+    const items = []
+    for (let y = minDate.getFullYear(); y <= maxDate.getFullYear(); y++) {
+      items.push({ value: y, label: String(y) })
+    }
+    return items
+  }
+
+  function buildMonthItems(forYear) {
+    let lo = 1
+    let hi = 12
+    if (forYear === minDate.getFullYear()) lo = minDate.getMonth() + 1
+    if (forYear === maxDate.getFullYear()) hi = maxDate.getMonth() + 1
+    const items = []
+    for (let m = lo; m <= hi; m++) items.push({ value: m, label: MONTH_LABELS[m - 1] })
+    return items
+  }
+
+  function buildDayItems(forYear, forMonth) {
+    let lo = 1
+    let hi = daysInMonth(forYear, forMonth)
+    if (forYear === minDate.getFullYear() && forMonth === minDate.getMonth() + 1) {
+      lo = Math.max(lo, minDate.getDate())
+    }
+    if (forYear === maxDate.getFullYear() && forMonth === maxDate.getMonth() + 1) {
+      hi = Math.min(hi, maxDate.getDate())
+    }
+    const items = []
+    for (let d = lo; d <= hi; d++) items.push({ value: d, label: String(d) })
+    return items
+  }
+
+  const yearItems = buildYearItems()
+  const monthItems = buildMonthItems(year)
+  const dayItems = buildDayItems(year, month)
+
+  // Keeps month/day valid whenever a wheel above them moves somewhere
+  // that makes the current pick impossible — e.g. dragging the year
+  // down to the boundary year excludes months before `minDate`'s, or
+  // flipping to February strands a day-of-month in the 29-31 range.
+  // Deliberately re-derives from the *current* state each time rather
+  // than tracking "did the user touch this wheel" — simpler, and the
+  // only moment this can ever actually fire is right after a change to
+  // a wheel above it in the hierarchy.
+  useEffect(() => {
+    const items = buildMonthItems(year)
+    if (!items.some((i) => i.value === month)) {
+      setMonth(clamp(month, items[0].value, items[items.length - 1].value))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year])
+
+  useEffect(() => {
+    const items = buildDayItems(year, month)
+    if (!items.some((i) => i.value === day)) {
+      setDay(clamp(day, items[0].value, items[items.length - 1].value))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year, month])
 
   async function handleSave() {
     setError(null)
     setSaving(true)
     try {
-      const result = new Date(selectedDate)
+      const result = new Date(year, month - 1, day)
       if (hasTime) {
-        result.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0)
+        const h24 = period === 'PM' ? (hour12 % 12) + 12 : hour12 % 12
+        result.setHours(h24, minute, 0, 0)
       }
       await onSave(result.toISOString())
     } catch (err) {
@@ -147,22 +202,34 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
     <div
       onClick={(e) => e.stopPropagation()}
       className={cn(
-        'absolute top-full right-0 z-30 mt-2 w-56 rounded-lg border bg-card p-3 text-left shadow-lg',
+        'absolute top-full right-0 z-30 mt-2 w-64 rounded-lg border bg-card p-3 text-left shadow-lg',
         className
       )}
     >
-      <p className="text-center text-xs font-medium text-muted-foreground">Date</p>
-      <WheelPicker items={dateItems} value={dayOffset} onChange={setDayOffset} />
+      <p className="text-center text-xs font-medium tabular-nums text-muted-foreground">
+        Date: {pad2(day)},{pad2(month)},{year}
+      </p>
+      <div className="mt-1 flex justify-center gap-1">
+        <WheelPicker items={dayItems} value={day} onChange={setDay} itemHeight={32} visibleCount={3} className="w-14" />
+        <WheelPicker items={monthItems} value={month} onChange={setMonth} itemHeight={32} visibleCount={3} className="w-16" />
+        <WheelPicker items={yearItems} value={year} onChange={setYear} itemHeight={32} visibleCount={3} className="w-16" />
+      </div>
 
-      <label className="mt-2 flex items-center justify-center gap-2 text-xs">
+      <label className="mt-3 flex items-center justify-center gap-2 text-xs">
         <Checkbox checked={hasTime} onCheckedChange={setHasTime} disabled={saving} />
-        Add a time
+        <span>Add a time</span>
       </label>
 
       {hasTime && (
         <>
-          <p className="mt-2 text-center text-xs font-medium text-muted-foreground">Time</p>
-          <WheelPicker items={TIME_ITEMS} value={minutes} onChange={setMinutes} />
+          <p className="mt-2 text-center text-xs font-medium tabular-nums text-muted-foreground">
+            Time: {pad2(hour12)}:{pad2(minute)}:{period}
+          </p>
+          <div className="mt-1 flex justify-center gap-1">
+            <WheelPicker items={HOUR_ITEMS} value={hour12} onChange={setHour12} itemHeight={32} visibleCount={3} className="w-12" />
+            <WheelPicker items={MINUTE_ITEMS} value={minute} onChange={setMinute} itemHeight={32} visibleCount={3} className="w-12" />
+            <WheelPicker items={PERIOD_ITEMS} value={period} onChange={setPeriod} itemHeight={32} visibleCount={3} className="w-14" />
+          </div>
         </>
       )}
 
@@ -193,11 +260,14 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
       ) : (
       <div className="mt-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
+          {/* Yellow, matching the amber "Due ..." badge this editor
+              opens from everywhere it's used — reads as "this is the
+              deadline action" rather than a plain text link. */}
           <button
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="text-xs font-medium text-emerald-700 hover:underline"
+            className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-60"
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
