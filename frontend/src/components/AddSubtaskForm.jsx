@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DeadlineEditor } from '@/components/DeadlineEditor'
+import { useExclusiveDeadlineEditor } from '@/hooks/useExclusiveDeadlineEditor'
 import { formatDeadline } from '@/lib/utils'
 
 // Standalone add-subtask form. Viewing/toggling/deleting existing
@@ -24,13 +25,13 @@ import { formatDeadline } from '@/lib/utils'
 export function AddSubtaskForm({ onAdd, onCancel }) {
   const [name, setName] = useState('')
   const [dateDeadline, setDateDeadline] = useState(null)
-  const [editingDeadline, setEditingDeadline] = useState(false)
+  const [editingDeadline, openDeadlineEditor, closeDeadlineEditor] = useExclusiveDeadlineEditor()
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState(null)
 
   function handlePickDeadline(iso) {
     setDateDeadline(iso)
-    setEditingDeadline(false)
+    closeDeadlineEditor()
   }
 
   async function handleSubmit(event) {
@@ -68,31 +69,17 @@ export function AddSubtaskForm({ onAdd, onCancel }) {
         )}
       </div>
 
-      <div>
+      <div className="relative w-fit">
         <button
           type="button"
-          onClick={() => setEditingDeadline((v) => !v)}
+          onClick={() => (editingDeadline ? closeDeadlineEditor() : openDeadlineEditor())}
           disabled={adding}
           className="w-fit rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:pointer-events-none disabled:opacity-60"
         >
           {dateDeadline ? `Due ${formatDeadline(dateDeadline)}` : 'Set deadline'}
         </button>
         {editingDeadline && (
-          // Flowed inline rather than the usual floating popover (see
-          // DeadlineEditor's own default `absolute` positioning) —
-          // this form can sit near the bottom of a short card (e.g. a
-          // task with no other subtasks yet), and a popover expanding
-          // downward from there has nowhere to go but over whatever's
-          // below in the page, which on the list view is the *next*
-          // task card. Flowing inline instead just grows the form (and
-          // the card around it) to fit, the same override AddTaskFab
-          // already used for its own non-floating case.
-          <DeadlineEditor
-            value={dateDeadline}
-            onSave={handlePickDeadline}
-            onCancel={() => setEditingDeadline(false)}
-            className="static mt-2 w-full shadow-none"
-          />
+          <DeadlineEditor value={dateDeadline} onSave={handlePickDeadline} onCancel={closeDeadlineEditor} />
         )}
       </div>
 

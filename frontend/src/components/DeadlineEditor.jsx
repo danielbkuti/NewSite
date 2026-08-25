@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { WheelPicker } from '@/components/ui/wheel-picker'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
@@ -107,6 +107,61 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
   const [error, setError] = useState(null)
   const [confirmingClear, setConfirmingClear] = useState(false)
 
+  const rootRef = useRef(null)
+  // Whether this popover is flipped to open upward instead of its
+  // default downward — a card far enough down the page otherwise pushes
+  // Save/Cancel below the viewport with no way to scroll to them
+  // (position:absolute doesn't get the browser to auto-scroll for you).
+  // Measured after every layout that can change the popover's own
+  // height (mount, and toggling "Add a time" adds/removes three more
+  // wheels) rather than once — a popover that fit before hasTime was
+  // checked can easily not fit after.
+  const [openUpward, setOpenUpward] = useState(false)
+  // Same idea, horizontally — the default `right-0` (right edge of the
+  // popover lines up with the right edge of its anchor, growing
+  // leftward) is right for a trigger that itself sits near the right
+  // edge of its card, which is most of them. A left-anchored trigger
+  // (the add-subtask form's "Set deadline") on a narrower window can
+  // push the popover's *left* edge past the left edge of the viewport
+  // instead; `alignLeft` flips it to grow rightward from the anchor's
+  // left edge when that's the case.
+  const [alignLeft, setAlignLeft] = useState(false)
+
+  useLayoutEffect(() => {
+    const el = rootRef.current
+    // Every caller wraps this in its own `position: relative` anchor
+    // (a trigger button, usually) — that anchor's own position doesn't
+    // move when *this* popover flips between top-full/bottom-full or
+    // left-0/right-0, so measuring off of it (rather than the
+    // popover's own current rect) gives a stable baseline regardless
+    // of which way it's already flipped. The popover's rendered size
+    // is unaffected by which edge it's anchored from, so it's safe to
+    // read directly.
+    const anchor = el?.parentElement
+    if (!el || !anchor) return
+    const anchorRect = anchor.getBoundingClientRect()
+    const popoverRect = el.getBoundingClientRect()
+
+    const spaceBelow = window.innerHeight - anchorRect.top
+    const spaceAbove = anchorRect.top
+    setOpenUpward(popoverRect.height > spaceBelow && spaceAbove > spaceBelow)
+
+    const rightAlignedLeftEdge = anchorRect.right - popoverRect.width
+    const leftAlignedRightEdge = anchorRect.left + popoverRect.width
+    const rightAlignedOverflowsLeft = rightAlignedLeftEdge < 0
+    const leftAlignedOverflowsRight = leftAlignedRightEdge > window.innerWidth
+    setAlignLeft(rightAlignedOverflowsLeft && !leftAlignedOverflowsRight)
+  }, [hasTime])
+
+  // Closes on Escape — the overlay below handles every other way out.
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') onCancel()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onCancel])
+
   function buildYearItems() {
     const items = []
     for (let y = minDate.getFullYear(); y <= maxDate.getFullYear(); y++) {
@@ -199,15 +254,46 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
   }
 
   return (
-    <div
-      onClick={(e) => e.stopPropagation()}
-      className={cn(
-        'absolute top-full right-0 z-30 mt-2 w-64 rounded-lg border bg-card p-3 text-left shadow-lg',
-        className
-      )}
-    >
+    <>
+      {/* Full-page, invisible click-catcher — closes the popover on any
+          click outside it, *and* stops that click from also reaching
+          whatever it happened to land on underneath (a task card's own
+          navigate-on-click, a checkbox). A `document`-level JS listener
+          doesn't do that reliably: some interactive elements (this
+          app's own custom Checkbox included) toggle off `pointerdown`
+          rather than `click`, so listening for one specific event type
+          can miss the thing that actually changed state. A real element
+          sitting in front of everything else, caught by the browser's
+          own hit-testing before the click ever reaches its visual
+          target, works regardless of which event any given widget
+          happens to key off of. Sits below the popover itself (z-20 vs
+          z-30) so clicks inside it still land normally. */}
+      <div
+        className="fixed inset-0 z-20"
+        onClick={(e) => {
+          // This overlay is a fixed-position element, but it's still a
+          // DOM *descendant* of wherever this editor is mounted (inside
+          // the task card it belongs to) — without this, the click
+          // would keep bubbling right up through the card's own
+          // navigate-on-click after closing the popover, defeating the
+          // whole point.
+          e.stopPropagation()
+          onCancel()
+        }}
+        aria-hidden="true"
+      />
+      <div
+        ref={rootRef}
+        onClick={(e) => e.stopPropagation()}
+        className={cn(
+          'absolute z-30 w-64 rounded-lg border bg-card p-3 text-left shadow-lg',
+          openUpward ? 'bottom-full mb-2' : 'top-full mt-2',
+          alignLeft ? 'left-0' : 'right-0',
+          className
+        )}
+      >
       <p className="text-center text-xs font-medium tabular-nums text-muted-foreground">
-        Date: {pad2(day)},{pad2(month)},{year}
+        Date: {pad2(day)}/{pad2(month)}/{year}
       </p>
       <div className="mt-1 flex justify-center gap-1">
         <WheelPicker items={dayItems} value={day} onChange={setDay} itemHeight={32} visibleCount={3} className="w-14" />
@@ -292,6 +378,7 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
         )}
       </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }
