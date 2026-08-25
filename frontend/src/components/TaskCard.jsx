@@ -13,10 +13,10 @@ import { PulseRing } from '@/components/PulseRing'
 const PROGRESS_GRADIENT = 'bg-gradient-to-r from-[#e0c3fc] via-[#7c5fb0] to-[#8ec5fc]'
 // The hover-fill preview on the Pending button (see PendingCompleteButton).
 const HOVER_FILL_MS = 350
-// How long a just-checked subtask stays visible — checkmark filled in,
-// name crossed out — before it's actually allowed to drop out of the
-// stack. Comfortably over 1 second per spec.
-const SUBTASK_CELEBRATION_MS = 1400
+// A stable empty Set — the default for `celebratingSubtaskIds` when a
+// caller doesn't pass one, so `.has()` always has something to call
+// without allocating a fresh Set on every render.
+const EMPTY_SET = new Set()
 // How long `justSavedDeadline` stays true after a save — just needs to
 // clear the single pulse PulseRing plays off that true edge (1s) with
 // a little room to spare, so a later unrelated re-render doesn't find
@@ -45,10 +45,14 @@ const EXPANDED_PITCH = 48
 // sits inside both the stack's own expand/collapse toggle and the whole
 // card's click-to-open-detail-page behavior, and interacting with
 // either control should do neither. `justCompleted` is true for the
-// brief window (see SUBTASK_CELEBRATION_MS) after checking it off,
-// during which the parent deliberately keeps rendering it here instead
-// of letting it drop out immediately — long enough for the checkmark +
-// strikethrough to actually read as an animation.
+// brief window (TaskList's own SUBTASK_CELEBRATION_MS) after checking
+// it off, during which the parent deliberately keeps rendering it here
+// instead of letting it drop out immediately — long enough for the
+// checkmark + strikethrough to actually read as an animation. Owned by
+// TaskList now, not this card, so the *other* copy of the same
+// subtask (its promoted standalone entry, or this cascade-bundled one,
+// whichever wasn't the one actually clicked) celebrates in step too —
+// see TaskCard's own `celebratingSubtaskIds` prop for why.
 //
 // `partOf` is what turns this from a stack row into a standalone card:
 // passed only when the task list promotes a subtask to its own spot in
@@ -304,26 +308,33 @@ export function SubtaskStackCard({
   )
 }
 
-// The task's own status toggle. When it's clickable (not completed, and
-// not blocked on incomplete subtasks), hovering previews what clicking
-// it would do: the gradient sweeps in from the left like a loading bar
-// and the label flips to "Complete" once it's fully filled. That preview
-// is purely visual — the button is fully clickable at every point along
-// the fill, not just once it finishes; a click always fires immediately
-// regardless of hover progress. Moving the mouse away cancels the timer
-// and the fill retreats (plain CSS transition reversing).
+// The task's own status toggle — both directions. When it's clickable
+// (not blocked on incomplete subtasks), hovering previews what
+// clicking would do: for a pending task, the gradient sweeps in from
+// the left like a loading bar and the label flips to "Complete" once
+// fully filled; for an already-completed task, a plain fill sweeps in
+// from the *right* over the gradient and the label flips to "Undo" —
+// same mechanic, reversed, so completing and undoing read as mirror
+// images of each other. Either preview is purely visual — the button
+// is fully clickable at every point along the fill, not just once it
+// finishes; a click always fires immediately regardless of hover
+// progress. Moving the mouse away cancels the timer and the fill
+// retreats (plain CSS transition reversing). Undo preserves every
+// other field (due date, created date) — it's a plain `completed:
+// false` PATCH, same request shape either direction; the backend
+// clears dateCompleted on its own and touches nothing else.
 export function PendingCompleteButton({ task, blocked, onClick }) {
-  const [hoverFilled, setHoverFilled] = useState(false)
+  const [hoverPreview, setHoverPreview] = useState(false)
   const timerRef = useRef(null)
 
   function handleMouseEnter() {
-    if (task.completed || blocked) return
-    timerRef.current = setTimeout(() => setHoverFilled(true), HOVER_FILL_MS)
+    if (blocked) return
+    timerRef.current = setTimeout(() => setHoverPreview(true), HOVER_FILL_MS)
   }
 
   function handleMouseLeave() {
     clearTimeout(timerRef.current)
-    setHoverFilled(false)
+    setHoverPreview(false)
   }
 
   useEffect(() => () => clearTimeout(timerRef.current), [])
@@ -338,7 +349,7 @@ export function PendingCompleteButton({ task, blocked, onClick }) {
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       disabled={blocked}
-      title={blocked ? 'Complete all subtasks first' : undefined}
+      title={blocked ? 'Complete all subtasks first' : task.completed ? 'Click to mark as pending again' : undefined}
       className={cn(
         'group relative shrink-0 overflow-hidden rounded-full px-4 py-1.5 text-sm font-semibold transition-colors',
         task.completed
@@ -357,8 +368,21 @@ export function PendingCompleteButton({ task, blocked, onClick }) {
           style={{ transitionDuration: `${HOVER_FILL_MS}ms` }}
         />
       )}
-      <span className={cn('relative', hoverFilled && !task.completed && 'text-white')}>
-        {task.completed ? 'Completed' : hoverFilled ? 'Complete' : 'Pending'}
+      {task.completed && !blocked && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 origin-right scale-x-0 bg-secondary transition-transform ease-linear group-hover:scale-x-100"
+          style={{ transitionDuration: `${HOVER_FILL_MS}ms` }}
+        />
+      )}
+      <span
+        className={cn(
+          'relative',
+          hoverPreview && !task.completed && 'text-white',
+          hoverPreview && task.completed && 'text-secondary-foreground'
+        )}
+      >
+        {task.completed ? (hoverPreview ? 'Undo' : 'Completed') : hoverPreview ? 'Complete' : 'Pending'}
       </span>
     </button>
   )
@@ -384,29 +408,22 @@ export function TaskCard({
   selectMode = false,
   selected = false,
   onSelectToggle,
+  // Owned by TaskList, not this card — a subtask promoted to its own
+  // standalone entry in the due-date sort renders as a *second*,
+  // separate SubtaskStackCard instance outside this component
+  // entirely (see TaskList's own renderEntry), so "is this subtask
+  // celebrating" can't live in this card's local state the way it
+  // used to: checking it off from the promoted card wouldn't be
+  // visible in here, and vice versa. Lifting it to TaskList (shared by
+  // every card, cascade-bundled or promoted, for the same subtask id)
+  // is what makes both copies cross out together regardless of which
+  // one was actually clicked.
+  celebratingSubtaskIds = EMPTY_SET,
 }) {
   const navigate = useNavigate()
   const [editingDeadline, setEditingDeadline] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [addingSubtask, setAddingSubtask] = useState(false)
-  // Subtask ids currently mid-celebration — held in the visible stack
-  // (as "incomplete") until their timer clears, so checking one off
-  // doesn't just instantly vanish it. See SUBTASK_CELEBRATION_MS.
-  const [celebratingSubtaskIds, setCelebratingSubtaskIds] = useState(() => new Set())
-
-  function handleToggleSubtaskComplete(subtask, checked) {
-    if (checked) {
-      setCelebratingSubtaskIds((current) => new Set(current).add(subtask.id))
-      setTimeout(() => {
-        setCelebratingSubtaskIds((current) => {
-          const next = new Set(current)
-          next.delete(subtask.id)
-          return next
-        })
-      }, SUBTASK_CELEBRATION_MS)
-    }
-    return onToggleSubtask(task, subtask, checked)
-  }
 
   // Two clicks to actually delete: the first just reveals a confirm
   // step, in-line rather than a browser confirm() dialog. Only reset
@@ -659,7 +676,7 @@ export function TaskCard({
                     opacity: expanded ? 1 : 1 - i * 0.3,
                     transform: expanded ? 'scale(1)' : `scale(${1 - i * 0.03})`,
                   }}
-                  onToggleComplete={(checked) => handleToggleSubtaskComplete(subtask, checked)}
+                  onToggleComplete={(checked) => onToggleSubtask(task, subtask, checked)}
                   onSetDeadline={(dateDeadline) => onSetSubtaskDeadline(task, subtask, dateDeadline)}
                   onDelete={() => onDeleteSubtask(task, subtask)}
                   pulseReady={pulseReady}

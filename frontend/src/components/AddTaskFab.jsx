@@ -2,9 +2,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, X, SquarePlus, Target, CalendarDays, ListPlus, CalendarClock, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { AddSubtaskForm } from '@/components/AddSubtaskForm'
-import { DeadlineEditor } from '@/components/DeadlineEditor'
-import { createSubTask, updateTask } from '@/lib/tasks'
+import { updateTask } from '@/lib/tasks'
 import { useTaskStore } from '@/context/TaskStoreContext'
 import { cn } from '@/lib/utils'
 
@@ -79,14 +77,28 @@ function ActionCard({ children, as: Tag = 'div', ...props }) {
 // dedicated add flow for Goals/Calendar (those pages don't exist yet
 // — see ComingSoonPage), so those two just navigate there for now.
 //
-// The whole menu — option stack or an expanded action card — floats
-// directly above the FAB rather than in a centered dialog, so it
-// visibly originates from the button that opened it. The full-screen
-// blurred backdrop still blocks the rest of the page, same as
-// OverdueGateModal; only the content's position changed.
+// The subtask and deadline options used to open their own inline
+// mini-editor floating above the FAB (a second copy of AddSubtaskForm/
+// DeadlineEditor, separate from the ones already on the task detail
+// page itself). They now just navigate to the detail page instead —
+// `?action=subtask` / `?action=deadline` — and TaskDetailPage opens
+// its own real editor in response (see the `action` query-param effect
+// there). One editor per concept instead of two: the page's own
+// "Add subtasks"/due-date-badge controls are what actually run, the
+// FAB just points at them. Description doesn't have an equivalent on
+// the page yet (there's nowhere there to display or edit it — see the
+// backlog note on that), so it keeps its own inline form here for now.
+//
+// The menu itself — option stack or the description form it expands
+// into — still floats directly above the FAB rather than in a
+// centered dialog, so it visibly originates from the button that
+// opened it. The full-screen blurred backdrop still blocks the rest
+// of the page, same as OverdueGateModal; only the content's position
+// changed.
 export function AddTaskFab() {
   const [open, setOpen] = useState(false)
-  // null (option stack) | 'subtask' | 'deadline' | 'description'
+  // null | 'description' — the only option left that still expands
+  // in place rather than navigating.
   const [activeAction, setActiveAction] = useState(null)
   const [descriptionDraft, setDescriptionDraft] = useState('')
   const [descriptionDraftDirty, setDescriptionDraftDirty] = useState(false)
@@ -131,16 +143,6 @@ export function AddTaskFab() {
     navigate(path)
   }
 
-  async function handleAddSubtask(name) {
-    await createSubTask({ task: taskId, name })
-    await closeAndRefresh()
-  }
-
-  async function handleSaveDeadline(dateDeadline) {
-    await updateTask(taskId, { dateDeadline })
-    await closeAndRefresh()
-  }
-
   async function handleSaveDescription(event) {
     event.preventDefault()
     setError(null)
@@ -161,9 +163,9 @@ export function AddTaskFab() {
   ]
 
   const detailOptions = [
-    { key: 'subtask', label: 'Add a new subtask', icon: ListPlus, accent: COLOR_SUBTASK, onClick: () => setActiveAction('subtask') },
+    { key: 'subtask', label: 'Add a new subtask', icon: ListPlus, accent: COLOR_SUBTASK, onClick: () => goTo(`/tasks/${taskId}?action=subtask`) },
     { key: 'task', label: 'Add a new task', icon: SquarePlus, accent: COLOR_TASK, onClick: () => goTo('/tasks/new') },
-    { key: 'deadline', label: 'Set/Edit deadline', icon: CalendarClock, accent: COLOR_DEADLINE, onClick: () => setActiveAction('deadline') },
+    { key: 'deadline', label: 'Set/Edit deadline', icon: CalendarClock, accent: COLOR_DEADLINE, onClick: () => goTo(`/tasks/${taskId}?action=deadline`) },
     { key: 'description', label: 'Add a task description', icon: FileText, accent: COLOR_DESCRIPTION, onClick: () => setActiveAction('description') },
   ]
 
@@ -192,64 +194,6 @@ export function AddTaskFab() {
                   accent={option.accent}
                 />
               ))}
-
-            {activeAction === 'subtask' && (
-              <ActionCard>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h2 className="text-sm font-semibold">Add a subtask</h2>
-                    {currentTask && (
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        Added to &quot;{currentTask.name}&quot;
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={closeMenu}
-                    aria-label="Close"
-                    className="shrink-0 text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
-                <div className="mt-3">
-                  <AddSubtaskForm onAdd={handleAddSubtask} />
-                </div>
-              </ActionCard>
-            )}
-
-            {activeAction === 'deadline' && (
-              <ActionCard>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h2 className="text-sm font-semibold">Set deadline</h2>
-                    {currentTask && (
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        For &quot;{currentTask.name}&quot;
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={closeMenu}
-                    aria-label="Close"
-                    className="shrink-0 text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
-                <div className="relative mt-3">
-                  <DeadlineEditor
-                    value={currentTask?.dateDeadline}
-                    onSave={handleSaveDeadline}
-                    onCancel={() => setActiveAction(null)}
-                    minDayOffset={0}
-                    className="static mt-0 w-full shadow-none"
-                  />
-                </div>
-              </ActionCard>
-            )}
 
             {activeAction === 'description' && (
               <ActionCard as="form" onSubmit={handleSaveDescription}>

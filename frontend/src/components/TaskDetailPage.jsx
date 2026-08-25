@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { ArrowLeft, Trash2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
@@ -50,6 +50,7 @@ export function TaskDetailPage() {
   const { id } = useParams()
   const numericId = Number(id)
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   // Reads the task straight out of the shared store rather than
   // keeping its own independent copy — this is what makes the FAB's
   // detail-page actions (add subtask, set deadline, add description)
@@ -75,6 +76,8 @@ export function TaskDetailPage() {
   const [deleteError, setDeleteError] = useState(null)
   const [editingDeadline, setEditingDeadline] = useState(false)
   const [addingSubtask, setAddingSubtask] = useState(false)
+  const deadlineSectionRef = useRef(null)
+  const subtaskSectionRef = useRef(null)
   // Flipped true right after a successful deadline save, then back to
   // false a moment later — PulseRing uses the true edge to fire one
   // confirming pulse, independent of whether the new deadline is
@@ -87,6 +90,36 @@ export function TaskDetailPage() {
   // rows on this page: this is the one place the app shows a genuinely
   // ticking "how overdue" duration, in days once it runs past 24h.
   const deadlineStatus = useDeadlineStatus(task?.dateDeadline, task?.completed, { liveOverdue: true })
+
+  // Opens this page's own subtask/deadline editor in response to
+  // `?action=subtask` / `?action=deadline` on the URL — what
+  // AddTaskFab's matching detail-page options now do instead of
+  // floating a second, separate copy of the same editor next to the
+  // FAB itself. Scrolls the opened section into view too, since the
+  // subtask one in particular can land below the fold on a task that
+  // already has several. Strips the param right after (replace, so
+  // back/refresh doesn't re-trigger it) — this is a one-time "open
+  // this" signal, not persistent page state.
+  useEffect(() => {
+    const action = searchParams.get('action')
+    if (!action || !task) return
+    if (action === 'subtask') {
+      setAddingSubtask(true)
+      subtaskSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    } else if (action === 'deadline') {
+      setEditingDeadline(true)
+      deadlineSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('action')
+        return next
+      },
+      { replace: true }
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, task])
 
   // One-time check, the moment the task first loads: if the task or any
   // of its still-open subtasks is close to its deadline, briefly nudge
@@ -324,29 +357,29 @@ export function TaskDetailPage() {
           />
         </h1>
         <div className="w-44 shrink-0">
-          {task.completed ? (
-            <div className="flex flex-col items-end gap-1">
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                Complete
-              </span>
-              <p className="text-right text-xs text-muted-foreground">
-                {task.dateCompleted ? `Completed ${formatDeadline(task.dateCompleted)}` : 'Completed'}
-              </p>
-            </div>
-          ) : (
-            // Always a real Pending/Complete button here, whether or
-            // not there are subtasks — unlike the list's TaskCard,
-            // this page lets completing cascade-close any that are
-            // still open (see handleToggleTaskComplete), so it's never
-            // actually blocked. With no subtasks, this is also the
-            // only completion progress shown at all (no meaningless
-            // 0%/100% bar with nothing behind it); with subtasks, the
-            // bar below it still tracks their individual progress.
+          {/* Always a real Pending/Complete button here, whether or not
+              there are subtasks — unlike the list's TaskCard, this page
+              lets completing cascade-close any that are still open (see
+              handleToggleTaskComplete), so it's never actually blocked.
+              With no subtasks, this is also the only completion progress
+              shown at all (no meaningless 0%/100% bar with nothing
+              behind it); with subtasks, the bar below it still tracks
+              their individual progress. Once completed, the button
+              itself doubles as the undo control (hover to preview,
+              click to reopen — see PendingCompleteButton) — undoing is
+              a plain `completed: false` PATCH, so the due date and
+              created-on date underneath are untouched either way. */}
+          <div className="flex flex-col items-end gap-1">
             <div className="relative inline-flex justify-end">
               {celebratingTask && <ConfettiBurst />}
               <PendingCompleteButton task={task} blocked={false} onClick={handleToggleTaskComplete} />
             </div>
-          )}
+            {task.completed && (
+              <p className="text-right text-xs text-muted-foreground">
+                {task.dateCompleted ? `Completed ${formatDeadline(task.dateCompleted)}` : 'Completed'}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -365,7 +398,7 @@ export function TaskDetailPage() {
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+      <div ref={deadlineSectionRef} className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">Created {formatDeadline(task.dateCreated)}</p>
 
         {task.completed ? (
@@ -417,24 +450,7 @@ export function TaskDetailPage() {
         )}
       </div>
 
-      {!hasSubtasks ? (
-        <div className="mt-8">
-          {addingSubtask ? (
-            <AddSubtaskForm onAdd={handleAddSubtask} onCancel={() => setAddingSubtask(false)} />
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Want to break this down into smaller chunks?{' '}
-              <button
-                type="button"
-                onClick={() => setAddingSubtask(true)}
-                className="font-medium text-sky-600 hover:text-sky-700 hover:underline"
-              >
-                Add subtasks
-              </button>
-            </p>
-          )}
-        </div>
-      ) : (
+      {hasSubtasks && (
         <SubtaskFlipList subtasks={sortedSubtasks}>
           {(subtask) => {
             const checked = subtask.completed || celebratingIds.has(subtask.id)
@@ -451,6 +467,36 @@ export function TaskDetailPage() {
           }}
         </SubtaskFlipList>
       )}
+
+      {/* Always somewhere to add a subtask, whether the task has none
+          yet (the inviting prompt) or already has some (a plain link
+          below the list) — previously the second case had no way to
+          add another one on this page at all, only via the FAB's own
+          (now-removed) inline form. */}
+      <div ref={subtaskSectionRef} className={cn(hasSubtasks ? 'mt-3' : 'mt-8')}>
+        {addingSubtask ? (
+          <AddSubtaskForm onAdd={handleAddSubtask} onCancel={() => setAddingSubtask(false)} />
+        ) : !hasSubtasks ? (
+          <p className="text-sm text-muted-foreground">
+            Want to break this down into smaller chunks?{' '}
+            <button
+              type="button"
+              onClick={() => setAddingSubtask(true)}
+              className="font-medium text-sky-600 hover:text-sky-700 hover:underline"
+            >
+              Add subtasks
+            </button>
+          </p>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAddingSubtask(true)}
+            className="text-xs font-medium text-sky-600 hover:text-sky-700 hover:underline"
+          >
+            + Add another subtask
+          </button>
+        )}
+      </div>
 
       {hiddenCompletedSubtaskCount > 0 && (
         <Link
