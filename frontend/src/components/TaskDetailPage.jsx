@@ -8,6 +8,7 @@ import { cn, formatDeadline, calculateProgress, isDeadlineUrgent } from '@/lib/u
 import { useDeadlineStatus } from '@/hooks/useDeadlineStatus'
 import { useTaskStore } from '@/context/TaskStoreContext'
 import { DeadlineEditor } from '@/components/DeadlineEditor'
+import { useExclusiveDeadlineEditor } from '@/hooks/useExclusiveDeadlineEditor'
 import { AddSubtaskForm } from '@/components/AddSubtaskForm'
 import { InlineEditableName } from '@/components/InlineEditableName'
 import { ConfettiBurst } from '@/components/ConfettiBurst'
@@ -74,7 +75,7 @@ export function TaskDetailPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
-  const [editingDeadline, setEditingDeadline] = useState(false)
+  const [editingDeadline, openDeadlineEditor, closeDeadlineEditor] = useExclusiveDeadlineEditor()
   const [addingSubtask, setAddingSubtask] = useState(false)
   const deadlineSectionRef = useRef(null)
   const subtaskSectionRef = useRef(null)
@@ -106,12 +107,12 @@ export function TaskDetailPage() {
     if (action === 'subtask') {
       // Mutual exclusion with the task's own deadline editor — see
       // openAddSubtask's comment below for why.
-      setEditingDeadline(false)
+      closeDeadlineEditor()
       setAddingSubtask(true)
       subtaskSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     } else if (action === 'deadline') {
       setAddingSubtask(false)
-      setEditingDeadline(true)
+      openDeadlineEditor()
       deadlineSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
     setSearchParams(
@@ -172,7 +173,7 @@ export function TaskDetailPage() {
   // DeadlineEditor popovers can land close enough to overlap. Only
   // one deadline editor open on the page at a time.
   function openAddSubtask() {
-    setEditingDeadline(false)
+    closeDeadlineEditor()
     setAddingSubtask(true)
   }
 
@@ -266,7 +267,7 @@ export function TaskDetailPage() {
   async function handleDeadlineSave(dateDeadline) {
     const updated = await updateTask(id, { dateDeadline })
     mergeTask({ ...task, ...updated })
-    setEditingDeadline(false)
+    closeDeadlineEditor()
     setJustSavedDeadline(true)
     setTimeout(() => setJustSavedDeadline(false), PULSE_CONFIRM_MS)
   }
@@ -384,7 +385,12 @@ export function TaskDetailPage() {
               a plain `completed: false` PATCH, so the due date and
               created-on date underneath are untouched either way. */}
           <div className="flex flex-col items-end gap-1">
-            <div className="relative inline-flex justify-end">
+            <div
+              className={cn(
+                'relative inline-flex justify-end rounded-full',
+                celebratingTask && 'animate-flash-emerald'
+              )}
+            >
               {celebratingTask && <ConfettiBurst />}
               <PendingCompleteButton task={task} blocked={false} onClick={handleToggleTaskComplete} />
             </div>
@@ -426,7 +432,7 @@ export function TaskDetailPage() {
             <DeadlineEditor
               value={task.dateDeadline}
               onSave={handleDeadlineSave}
-              onCancel={() => setEditingDeadline(false)}
+              onCancel={closeDeadlineEditor}
               minDayOffset={0}
             />
           </div>
@@ -443,7 +449,7 @@ export function TaskDetailPage() {
                   // DeadlineEditor popovers can land close enough to
                   // overlap. Only one deadline editor open at a time.
                   setAddingSubtask(false)
-                  setEditingDeadline(true)
+                  openDeadlineEditor()
                 }}
                 className={cn(
                   'relative rounded-full px-3 py-1 text-xs font-medium tabular-nums transition-colors',
@@ -585,13 +591,21 @@ function SubtaskDetailRow({ subtask, checked, celebrating, busy, onToggle, onRen
   }
 
   return (
-    <div className="relative flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm transition-colors duration-300">
+    <div
+      className={cn(
+        'relative flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm transition-colors duration-300',
+        celebrating && 'animate-flash-emerald'
+      )}
+    >
       {celebrating && <ConfettiBurst />}
       <Checkbox
         checked={checked}
         onCheckedChange={onToggle}
         disabled={busy}
-        className="shrink-0 data-checked:border-emerald-500 data-checked:bg-emerald-500"
+        className={cn(
+          'shrink-0 data-checked:border-emerald-500 data-checked:bg-emerald-500',
+          celebrating && 'animate-check-pop'
+        )}
       />
       <InlineEditableName
         value={subtask.name}
@@ -666,8 +680,31 @@ function SubtaskDetailRow({ subtask, checked, celebrating, busy, onToggle, onRen
 function SubtaskFlipList({ subtasks, children }) {
   const nodeRefs = useRef(new Map())
   const prevRects = useRef(new Map())
+  // One in-flight FLIP animation's teardown per subtask id — the actual
+  // bug behind "a row stays stuck offset forever": `subtasks` is a fresh
+  // array every render (the parent derives it via filter/sort), so this
+  // effect re-runs far more often than just "the order actually
+  // changed" — including, in dev, StrictMode invoking it twice back to
+  // back for the same commit. If a *second* animation starts on a row
+  // while the *first* one's single `requestAnimationFrame` reset is
+  // still pending, both eventually fire and both try to zero the
+  // transform — usually harmless, but the two also fight over
+  // `el.style.transition`, and losing that race can leave the reset
+  // never actually applied. Tracking (and cancelling) whichever cycle
+  // was already running before starting a new one removes the race
+  // instead of hoping it resolves in the right order.
+  const inFlightRef = useRef(new Map())
 
   useLayoutEffect(() => {
+    // Clearing before every measurement means this always reads the
+    // *true* laid-out position, not one still offset by a previous
+    // cycle's transform — and self-heals the stuck-forever symptom the
+    // moment anything re-renders this list, even if the animation that
+    // caused it never cleaned up after itself.
+    nodeRefs.current.forEach((el) => {
+      if (el) el.style.transform = ''
+    })
+
     const newRects = new Map()
     nodeRefs.current.forEach((el, id) => {
       if (el) newRects.set(id, el.getBoundingClientRect().top)
@@ -679,16 +716,48 @@ function SubtaskFlipList({ subtasks, children }) {
       const newTop = newRects.get(id)
       if (prevTop === undefined || newTop === undefined) return
       const delta = prevTop - newTop
-      if (delta === 0) return
+      // Sub-pixel deltas (a neighbouring row's live-ticking countdown
+      // text nudging layout by a fraction of a px) aren't worth
+      // animating and, left unfiltered, can retrigger this every tick.
+      if (Math.abs(delta) < 1) return
+
+      // Cancel whatever cycle was already running for this row before
+      // starting a new one, rather than letting two race.
+      inFlightRef.current.get(id)?.()
 
       el.style.transition = 'none'
       el.style.transform = `translateY(${delta}px)`
       // Forces the browser to apply the transform above before the
       // transition below is added, otherwise it'd animate from 0 too.
       el.getBoundingClientRect()
-      requestAnimationFrame(() => {
+
+      let settled = false
+      function settle() {
+        if (settled) return
+        settled = true
+        el.style.transition = ''
+        el.style.transform = ''
+        el.removeEventListener('transitionend', settle)
+        clearTimeout(safetyTimer)
+        inFlightRef.current.delete(id)
+      }
+
+      const rafId = requestAnimationFrame(() => {
         el.style.transition = 'transform 300ms ease-out'
         el.style.transform = ''
+      })
+      // `transitionend` is the authoritative "actually done" signal;
+      // the timeout is a safety net in case it never fires (interrupted
+      // transition, zero-duration edge case) — either way this row
+      // isn't left stuck.
+      el.addEventListener('transitionend', settle)
+      const safetyTimer = setTimeout(settle, 500)
+
+      inFlightRef.current.set(id, () => {
+        cancelAnimationFrame(rafId)
+        el.removeEventListener('transitionend', settle)
+        clearTimeout(safetyTimer)
+        settled = true
       })
     })
 

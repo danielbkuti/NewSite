@@ -314,3 +314,30 @@
   .animate-pulse-ember,
   .animate-glyph-beat { animation: none; }
 }
+
+/* --- Completion flash --------------------------------------------------
+   A quick, one-shot acknowledgement that something was just checked
+   off — a green ring pulse on the card/row it happened on, and a pop
+   on the checkbox itself. Runs once (no `infinite`), triggered by the
+   same `celebrating`/`justCompleted` window everything else already
+   uses. Independent of ConfettiBurst — plays whether or not that's
+   enabled, so checking something off still reads as "done", not just
+   a silent colour swap. */
+@keyframes check-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.35); }
+  70%  { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+@keyframes flash-emerald-ring {
+  0%   { box-shadow: 0 0 0 0 rgb(16 185 129 / 0.65); }
+  60%  { box-shadow: 0 0 0 10px rgb(16 185 129 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(16 185 129 / 0); }
+}
+.animate-check-pop { animation: check-pop 420ms ease-out; }
+.animate-flash-emerald { animation: flash-emerald-ring 700ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-check-pop,
+  .animate-flash-emerald { animation: none; }
+}

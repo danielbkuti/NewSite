@@ -8,6 +8,7 @@ import { ConfettiBurst } from '@/components/ConfettiBurst'
 import { cn, formatDeadline, calculateProgress } from '@/lib/utils'
 import { useDeadlineStatus } from '@/hooks/useDeadlineStatus'
 import { DeadlineEditor } from '@/components/DeadlineEditor'
+import { useExclusiveDeadlineEditor } from '@/hooks/useExclusiveDeadlineEditor'
 import { PulseRing } from '@/components/PulseRing'
 
 const PROGRESS_GRADIENT = 'bg-gradient-to-r from-[#e0c3fc] via-[#7c5fb0] to-[#8ec5fc]'
@@ -22,6 +23,10 @@ const EMPTY_SET = new Set()
 // a little room to spare, so a later unrelated re-render doesn't find
 // it still true and think a save just happened again.
 const PULSE_CONFIRM_MS = 1200
+// How long the pointer has to sit over the subtask stack before the
+// "Click to see more" hint shows — long enough that just passing over
+// it on the way to actually clicking doesn't flash it.
+const STACK_HINT_DELAY_MS = 5000
 
 // Row pitch/height for the two states of the subtask stack: collapsed
 // (overlapping peek) vs. expanded (fully separated). Both are plain
@@ -60,6 +65,9 @@ const STATE_CHROME = {
     glyphBeat: null,
     bannerFrom: '#6b46a8',
     bannerTo: '#4f7fd4',
+    // Matches `.task-glass`'s own `bg-card` base (white in light mode)
+    // — see `floodBase`'s own comment below for what this is for.
+    floodBase: '#ffffff',
   },
   urgent: {
     flood: 'task-glass-urgent',
@@ -70,6 +78,7 @@ const STATE_CHROME = {
     glyphBeat: '2.4s',
     bannerFrom: '#9a3412',
     bannerTo: '#d4451c',
+    floodBase: '#fffaf8', // must match .task-glass-urgent's own background-color
   },
   overdue: {
     flood: 'task-glass-overdue',
@@ -80,6 +89,7 @@ const STATE_CHROME = {
     glyphBeat: '1.8s',
     bannerFrom: '#b91c1c',
     bannerTo: '#dc2626',
+    floodBase: '#fffafa', // must match .task-glass-overdue's own background-color
   },
   done: {
     flood: 'task-glass-done',
@@ -90,6 +100,7 @@ const STATE_CHROME = {
     glyphBeat: null,
     bannerFrom: '#047857',
     bannerTo: '#059669',
+    floodBase: '#f8fffb', // must match .task-glass-done's own background-color
   },
 }
 
@@ -112,10 +123,15 @@ const BADGE_CLASS = {
   overdue: 'bg-[#fee2e2] text-[#b91c1c]',
   done: 'bg-[#d1fae5] text-[#047857]',
 }
+// One step more saturated than the badge/pill tones (`PILL_CLASS`'s own
+// hover, `#ffd6c4`/`#fecaca`/`#bbf7d0`) rather than the resting badge
+// colour itself — the delete icon sits directly on that state's own
+// lustre wash (e.g. `.task-glass-urgent`'s `#fffaf8`), which is close
+// enough to `#ffe8e0` that the hover read as barely-there.
 const DELETE_CLASS = {
-  urgent: 'text-[#9a3412] hover:bg-[#ffe8e0] hover:text-[#9a3412]',
-  overdue: 'text-[#b91c1c] hover:bg-[#fee2e2] hover:text-[#b91c1c]',
-  done: 'text-[#047857] hover:bg-[#d1fae5] hover:text-[#047857]',
+  urgent: 'text-[#9a3412] hover:bg-[#ffd6c4] hover:text-[#9a3412]',
+  overdue: 'text-[#b91c1c] hover:bg-[#fecaca] hover:text-[#b91c1c]',
+  done: 'text-[#047857] hover:bg-[#bbf7d0] hover:text-[#047857]',
 }
 const TRACK_CLASS = {
   urgent: 'border-[#fca98d] bg-[#ffe8e0]',
@@ -267,8 +283,7 @@ export function SubtaskStackCard({
   // below from the subtask's own status instead.
   parentState = 'progress',
 }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [editingDeadline, setEditingDeadline] = useState(false)
+  const [editingDeadline, openDeadlineEditor, closeDeadlineEditor] = useExclusiveDeadlineEditor()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -278,7 +293,6 @@ export function SubtaskStackCard({
   // actually urgent/overdue.
   const [justSavedDeadline, setJustSavedDeadline] = useState(false)
   const deleteRef = useRef(null)
-  const menuRef = useRef(null)
   const checked = subtask.completed || justCompleted
   const countdown = useDeadlineStatus(subtask.dateDeadline, checked, { liveOverdue: true })
 
@@ -301,8 +315,7 @@ export function SubtaskStackCard({
       label: 'Reschedule',
       onClick: (e) => {
         e.stopPropagation()
-        setMenuOpen(false)
-        setEditingDeadline(true)
+        openDeadlineEditor()
       },
     }
   } else if (ownState === 'urgent') {
@@ -319,17 +332,6 @@ export function SubtaskStackCard({
     }
   }
   const showSubtaskBanner = partOf && ownState !== 'progress'
-
-  useEffect(() => {
-    if (!menuOpen) return
-    function handleOutsideClick(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleOutsideClick)
-    return () => document.removeEventListener('mousedown', handleOutsideClick)
-  }, [menuOpen])
 
   useEffect(() => {
     if (!confirmingDelete) return
@@ -353,6 +355,11 @@ export function SubtaskStackCard({
     }
   }
 
+  function toggleDeadlineEditor() {
+    if (editingDeadline) closeDeadlineEditor()
+    else openDeadlineEditor()
+  }
+
   // Checkbox.onCheckedChange hands back a boolean, not an event — the
   // stopPropagation happens via the Checkbox's own onClick instead.
   async function handleCheckboxChange(value) {
@@ -366,7 +373,7 @@ export function SubtaskStackCard({
 
   async function handleDeadlineSave(dateDeadline) {
     await onSetDeadline(dateDeadline)
-    setEditingDeadline(false)
+    closeDeadlineEditor()
     setJustSavedDeadline(true)
     setTimeout(() => setJustSavedDeadline(false), PULSE_CONFIRM_MS)
   }
@@ -380,7 +387,8 @@ export function SubtaskStackCard({
         disabled={busy || justCompleted}
         className={cn(
           'shrink-0 data-checked:border-emerald-500 data-checked:bg-emerald-500',
-          !checked && CHECKBOX_BORDER_CLASS[effectiveState]
+          !checked && CHECKBOX_BORDER_CLASS[effectiveState],
+          justCompleted && 'animate-check-pop'
         )}
       />
       <span
@@ -392,22 +400,19 @@ export function SubtaskStackCard({
         {subtask.name}
       </span>
 
-      {editingDeadline ? (
-        <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
-          <DeadlineEditor
-            value={subtask.dateDeadline}
-            onSave={handleDeadlineSave}
-            onCancel={() => setEditingDeadline(false)}
-          />
-        </div>
-      ) : subtask.dateDeadline ? (
-        <div className="relative shrink-0" ref={menuRef}>
+      {subtask.dateDeadline ? (
+        // The chip stays on screen the whole time, editor included —
+        // it used to be swapped out for the editor entirely, so the
+        // one piece of context you actually want while picking a new
+        // date (what it's currently set to) disappeared right when you
+        // opened the picker.
+        <div className="relative shrink-0">
           <PulseRing ready={(countdown.isOverdue || countdown.isUrgent) && pulseReady} forceOnce={justSavedDeadline} />
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation()
-              setMenuOpen((v) => !v)
+              toggleDeadlineEditor()
             }}
             className={cn(
               'relative rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums transition-colors',
@@ -430,67 +435,62 @@ export function SubtaskStackCard({
                   ? `Due in: ${countdown.countdownDisplay}`
                   : `Due ${formatDeadline(subtask.dateDeadline)}`}
           </button>
-          {menuOpen && (
-            <div className="absolute top-full right-0 z-10 mt-1 w-40 overflow-hidden rounded-lg border bg-card py-1 shadow-lg">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setEditingDeadline(true)
-                  setMenuOpen(false)
-                }}
-                className="block w-full px-3 py-1.5 text-left text-[11px] font-medium hover:bg-muted"
-              >
-                Change deadline
-              </button>
-            </div>
+          {editingDeadline && (
+            <DeadlineEditor value={subtask.dateDeadline} onSave={handleDeadlineSave} onCancel={closeDeadlineEditor} />
           )}
         </div>
       ) : null}
 
-      <div className="relative shrink-0" ref={deleteRef}>
-        {confirmingDelete ? (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="absolute top-full right-0 z-20 mt-1 w-44 rounded-lg border bg-card p-2.5 text-left shadow-lg"
-          >
-            <p className="text-[11px] text-muted-foreground">Are you sure you want to delete this subtask?</p>
-            <div className="mt-2 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmingDelete(false)}
-                disabled={deleting}
-                className="text-[11px] text-muted-foreground hover:underline"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteConfirm}
-                disabled={deleting}
-                className="text-[11px] font-medium text-destructive hover:underline"
-              >
-                {deleting ? 'Deleting…' : 'Delete'}
-              </button>
+      {/* A completed subtask loses its delete control here — same rule
+          as a completed task's own card (see TaskCard's delete-button
+          gate below): once something's done, this list view isn't
+          where you clean it up. Still deletable from the backend/other
+          views, just not this button. */}
+      {effectiveState !== 'done' && (
+        <div className="relative shrink-0" ref={deleteRef}>
+          {confirmingDelete ? (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="absolute top-full right-0 z-20 mt-1 w-44 rounded-lg border bg-card p-2.5 text-left shadow-lg"
+            >
+              <p className="text-[11px] text-muted-foreground">Are you sure you want to delete this subtask?</p>
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={deleting}
+                  className="text-[11px] text-muted-foreground hover:underline"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteConfirm}
+                  disabled={deleting}
+                  className="text-[11px] font-medium text-destructive hover:underline"
+                >
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              setConfirmingDelete(true)
-            }}
-            aria-label="Delete subtask"
-            className={cn(
-              'transition-colors',
-              effectiveState === 'progress' ? 'text-muted-foreground hover:text-destructive' : DELETE_CLASS[effectiveState]
-            )}
-          >
-            <Trash2 className="size-3.5" />
-          </button>
-        )}
-      </div>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setConfirmingDelete(true)
+              }}
+              aria-label="Delete subtask"
+              className={cn(
+                'transition-colors',
+                effectiveState === 'progress' ? 'text-muted-foreground hover:text-destructive' : DELETE_CLASS[effectiveState]
+              )}
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          )}
+        </div>
+      )}
     </>
   )
 
@@ -498,14 +498,30 @@ export function SubtaskStackCard({
     return (
       <div
         className={cn(
-          'absolute inset-x-0 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-all duration-300 ease-in-out',
+          // `border-2` (not the default 1px `border`) plus an explicit
+          // colour on the on-track case too — the theme's own default
+          // border token is nearly the same lightness as the card
+          // underneath it and all but disappeared.
+          'absolute inset-x-0 flex items-center gap-2 rounded-lg border-2 px-3 py-2 text-xs transition-all duration-300 ease-in-out',
           dimmed
             ? 'bg-muted/60 text-muted-foreground shadow-none'
             : parentState !== 'progress'
               ? ROW_CLASS[parentState]
-              : 'bg-card shadow-sm'
+              : 'border-slate-300 bg-card shadow-sm',
+          justCompleted && 'animate-flash-emerald'
         )}
-        style={style}
+        style={
+          editingDeadline
+            ? // The peek-stack's own `transform`/`opacity` (from `style`,
+              // set by TaskCard for the collapsed-stack scale/fade look)
+              // create a stacking context exactly like the card-level
+              // hover-lift did — trapping this row's own deadline-editor
+              // popover inside it instead of letting it paint above
+              // whatever's below. Neutralized only while editing; the
+              // peek visuals don't matter once you're mid-edit anyway.
+              { ...style, transform: 'none', opacity: 1 }
+            : style
+        }
       >
         {justCompleted && <ConfettiBurst />}
         {rowContent}
@@ -534,7 +550,8 @@ export function SubtaskStackCard({
         chrome.flood,
         'relative rounded-lg text-xs transition-all duration-300 ease-in-out',
         showSubtaskBanner ? 'p-0' : 'flex flex-col gap-2 bg-card px-3 py-2 shadow-sm',
-        chrome.heartbeat
+        chrome.heartbeat,
+        justCompleted && 'animate-flash-emerald'
       )}
       style={showSubtaskBanner ? { boxShadow: chrome.shadow } : undefined}
     >
@@ -606,6 +623,18 @@ export function PendingCompleteButton({ task, blocked, onClick }) {
       type="button"
       onClick={(e) => {
         e.stopPropagation()
+        // Reset the hover preview immediately rather than leaving it
+        // showing through the async completion toggle — task.completed
+        // (and everything derived from it: idleState, the two
+        // mutually-exclusive fill-sweep spans, the label) only updates
+        // once the request round-trips, but the mouse is almost always
+        // still sitting on the button right after a click. Without
+        // this, the *old* preview state hangs around across that gap
+        // and then collides with the real new state the instant it
+        // lands — several unrelated properties changing at once reads
+        // as a flicker rather than a clean transition.
+        clearTimeout(timerRef.current)
+        setHoverPreview(false)
         onClick()
       }}
       onMouseEnter={handleMouseEnter}
@@ -685,8 +714,27 @@ export function TaskCard({
   celebratingSubtaskIds = EMPTY_SET,
 }) {
   const navigate = useNavigate()
-  const [editingDeadline, setEditingDeadline] = useState(false)
+  const [editingDeadline, openDeadlineEditor, closeDeadlineEditor] = useExclusiveDeadlineEditor()
   const [expanded, setExpanded] = useState(false)
+  // The "Click to see more"/"Click to collapse" hint above the subtask
+  // stack — deliberately not a plain CSS `:hover` reveal (instant, and
+  // fires even on a passing mouse-over on the way to actually clicking
+  // it). Only shows once the pointer's sat there a beat; a click
+  // before that cancels the pending timer instead of flashing the hint
+  // right as the click registers.
+  const [showStackHint, setShowStackHint] = useState(false)
+  const stackHintTimerRef = useRef(null)
+
+  function handleStackMouseEnter() {
+    stackHintTimerRef.current = setTimeout(() => setShowStackHint(true), STACK_HINT_DELAY_MS)
+  }
+
+  function handleStackMouseLeave() {
+    clearTimeout(stackHintTimerRef.current)
+    setShowStackHint(false)
+  }
+
+  useEffect(() => () => clearTimeout(stackHintTimerRef.current), [])
   const [addingSubtask, setAddingSubtask] = useState(false)
 
   // Two clicks to actually delete: the first just reveals a confirm
@@ -716,9 +764,14 @@ export function TaskCard({
 
   async function handleDeadlineSave(dateDeadline) {
     await onSetDeadline(task, dateDeadline)
-    setEditingDeadline(false)
+    closeDeadlineEditor()
     setJustSavedDeadline(true)
     setTimeout(() => setJustSavedDeadline(false), PULSE_CONFIRM_MS)
+  }
+
+  function toggleDeadlineEditor() {
+    if (editingDeadline) closeDeadlineEditor()
+    else openDeadlineEditor()
   }
 
   const progress = calculateProgress(task)
@@ -802,7 +855,7 @@ export function TaskCard({
       onClick: (e) => {
         e.stopPropagation()
         setAddingSubtask(false)
-        setEditingDeadline(true)
+        openDeadlineEditor()
       },
     }
   } else if (state === 'urgent') {
@@ -846,10 +899,21 @@ export function TaskCard({
       className={cn(
         chrome.flood,
         'relative w-full cursor-pointer rounded-2xl bg-card',
-        'transition-[transform,box-shadow] duration-300 ease-out',
-        'hover:-translate-y-0.5',
+        // No `transform` here on purpose — even a tiny hover lift
+        // creates a new stacking context for the whole card, which
+        // then traps this card's own deadline-editor popover (z-30)
+        // inside it instead of letting it paint above the *next* card
+        // in the list. That's what made the popover only "overlap
+        // properly" while the mouse wasn't over it: hovering the
+        // popover itself still counts as hovering this card (it's a
+        // DOM descendant), so the stacking context — and the trapped
+        // z-index — came and went with the hover. `hover:shadow-xl`
+        // gives the same "this card is active" feedback without ever
+        // creating one.
+        'transition-shadow duration-300 ease-out hover:shadow-xl',
         showBanner ? 'p-0' : 'p-5',
         chrome.heartbeat,
+        celebrating && 'animate-flash-emerald',
         selected && 'ring-2 ring-sky-400'
       )}
       style={{ boxShadow: chrome.shadow }}
@@ -889,17 +953,14 @@ export function TaskCard({
           {task.name}
         </span>
 
-        <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-          {editingDeadline ? (
-            <div className="relative">
-              <DeadlineEditor
-                value={task.dateDeadline}
-                onSave={handleDeadlineSave}
-                onCancel={() => setEditingDeadline(false)}
-                minDayOffset={0}
-              />
-            </div>
-          ) : state === 'done' ? (
+        {/* The badge/chip stays on screen the whole time the editor's
+            open (it used to be swapped out for the editor entirely, so
+            the one piece of context worth keeping while picking a new
+            date — what it's currently set to — disappeared right when
+            you opened the picker). `relative` here is what the editor
+            (rendered alongside, not instead) anchors off of. */}
+        <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
+          {state === 'done' ? (
             // The banner now carries the completion date/outcome — this
             // slot repurposes into a quieter subtask summary, and drops
             // out entirely for a task with none.
@@ -927,7 +988,7 @@ export function TaskCard({
                 type="button"
                 onClick={() => {
                   setAddingSubtask(false)
-                  setEditingDeadline(true)
+                  toggleDeadlineEditor()
                 }}
                 className={cn(
                   'relative rounded-full px-3 py-1 text-xs font-medium tabular-nums transition-colors',
@@ -948,7 +1009,7 @@ export function TaskCard({
                 type="button"
                 onClick={() => {
                   setAddingSubtask(false)
-                  setEditingDeadline(true)
+                  toggleDeadlineEditor()
                 }}
                 className="relative rounded-full bg-amber-50 px-3 py-1 text-xs font-medium tabular-nums text-amber-700 transition-colors hover:bg-amber-100"
               >
@@ -956,34 +1017,50 @@ export function TaskCard({
               </button>
             </span>
           )}
-        </div>
-
-        <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-          {confirmingDelete ? (
-            <div className="flex flex-col items-end gap-1">
-              <p className="text-xs text-muted-foreground">Are you sure you want to delete this task?</p>
-              <div className="flex items-center gap-1">
-                <Button size="sm" variant="destructive" onClick={handleDeleteConfirm} disabled={deleting}>
-                  {deleting ? 'Deleting…' : 'Confirm'}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              onClick={() => setConfirmingDelete(true)}
-              aria-label="Delete task"
-              className={state === 'progress' ? 'hover:text-destructive' : DELETE_CLASS[state]}
-            >
-              <Trash2 />
-            </Button>
+          {editingDeadline && (
+            <DeadlineEditor
+              value={task.dateDeadline}
+              onSave={handleDeadlineSave}
+              onCancel={closeDeadlineEditor}
+              minDayOffset={0}
+            />
           )}
         </div>
+
+        {/* Delete is gone entirely once a task is completed — not from
+            the backend (TaskDetailPage's own delete button still works
+            on a completed task), just from this list-card view. A
+            completed task isn't something you clean up in passing while
+            scanning the list; the intentional friction of opening it
+            first (or using /progress) is the point. */}
+        {!task.completed && (
+          <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+            {confirmingDelete ? (
+              <div className="flex flex-col items-end gap-1">
+                <p className="text-xs text-muted-foreground">Are you sure you want to delete this task?</p>
+                <div className="flex items-center gap-1">
+                  <Button size="sm" variant="destructive" onClick={handleDeleteConfirm} disabled={deleting}>
+                    {deleting ? 'Deleting…' : 'Confirm'}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => setConfirmingDelete(true)}
+                aria-label="Delete task"
+                className={state === 'progress' ? 'hover:text-destructive' : DELETE_CLASS[state]}
+              >
+                <Trash2 />
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {deleteError && <p className="mt-2 text-xs text-destructive">{deleteError}</p>}
@@ -1035,11 +1112,22 @@ export function TaskCard({
           <div
             role="button"
             tabIndex={0}
-            onClick={() => setExpanded((v) => !v)}
+            onClick={() => {
+              clearTimeout(stackHintTimerRef.current)
+              setShowStackHint(false)
+              setExpanded((v) => !v)
+            }}
             onKeyDown={handleStackKeyDown}
-            className="group/cascade relative cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            onMouseEnter={handleStackMouseEnter}
+            onMouseLeave={handleStackMouseLeave}
+            className="relative cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
-            <div className="pointer-events-none absolute -top-7 left-0 z-10 rounded-md bg-foreground px-2 py-1 text-xs whitespace-nowrap text-background opacity-0 shadow-md transition-opacity duration-150 group-hover/cascade:opacity-100">
+            <div
+              className={cn(
+                'pointer-events-none absolute -top-7 left-0 z-10 rounded-md bg-foreground px-2 py-1 text-xs whitespace-nowrap text-background shadow-md transition-opacity duration-150',
+                showStackHint ? 'opacity-100' : 'opacity-0'
+              )}
+            >
               {expanded ? 'Click to collapse' : 'Click to see more'}
             </div>
             <p className="mb-1.5 text-xs font-medium text-muted-foreground">
@@ -1070,10 +1158,19 @@ export function TaskCard({
                   pulseReady={pulseReady}
                 />
               ))}
-              {/* fades the bottom of the collapsed stack out instead of
-                  ending on a hard edge, reinforcing that it's a peek */}
+              {/* Fades the bottom of the collapsed stack out instead of
+                  ending on a hard edge, reinforcing that it's a peek.
+                  Colour comes from this state's own `floodBase` (inline
+                  style, not the `from-card` Tailwind token) — the token
+                  resolves to plain white, which doesn't match a flooded
+                  card's own tinted background and left a visible
+                  square-cornered patch sitting on top of the last row's
+                  own rounded corner. */}
               {!expanded && (
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-card to-transparent" />
+                <div
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-5"
+                  style={{ background: `linear-gradient(to top, ${chrome.floodBase}, transparent)` }}
+                />
               )}
             </div>
           </div>
@@ -1090,53 +1187,56 @@ export function TaskCard({
         </div>
       )}
 
-      {/* Always somewhere to add a subtask, whether the task has none
-          yet (the inviting prompt) or already has some (a plain link
-          below the stack) — this used to be hard-gated behind
-          `task.subtasks.length === 0`, so the very first subtask
-          you added made this whole section (and the form with it)
-          disappear for good, with nothing on this card able to add a
-          second one. */}
-      <div onClick={(e) => e.stopPropagation()}>
-        {addingSubtask ? (
-          <div className="mt-4">
-            <AddSubtaskForm
-              onAdd={(name, dateDeadline) => onAddSubtask(task, name, dateDeadline)}
-              onCancel={() => setAddingSubtask(false)}
-            />
-          </div>
-        ) : task.subtasks.length === 0 ? (
-          <p className="mt-4 text-xs text-muted-foreground">
-            Want to break this down into smaller chunks?{' '}
+      {/* Always somewhere to add a subtask on an open task, whether it
+          has none yet (the inviting prompt) or already has some (a
+          plain link below the stack) — this used to be hard-gated
+          behind `task.subtasks.length === 0`, so the very first
+          subtask you added made this whole section (and the form with
+          it) disappear for good, with nothing on this card able to add
+          a second one. Gone entirely once the task is completed —
+          subtasks only make sense on something still open. */}
+      {!task.completed && (
+        <div onClick={(e) => e.stopPropagation()}>
+          {addingSubtask ? (
+            <div className="mt-4">
+              <AddSubtaskForm
+                onAdd={(name, dateDeadline) => onAddSubtask(task, name, dateDeadline)}
+                onCancel={() => setAddingSubtask(false)}
+              />
+            </div>
+          ) : task.subtasks.length === 0 ? (
+            <p className="mt-4 text-xs text-muted-foreground">
+              Want to break this down into smaller chunks?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  // Same mutual-exclusion reasoning as the deadline
+                  // badge's own onClick above — this form is about to
+                  // grow its own deadline picker directly underneath
+                  // it, close enough to the task's own to overlap if
+                  // both were open together.
+                  closeDeadlineEditor()
+                  setAddingSubtask(true)
+                }}
+                className="font-medium text-sky-600 hover:text-sky-700 hover:underline"
+              >
+                Add subtasks
+              </button>
+            </p>
+          ) : (
             <button
               type="button"
               onClick={() => {
-                // Same mutual-exclusion reasoning as the deadline
-                // badge's own onClick above — this form is about to
-                // grow its own deadline picker directly underneath
-                // it, close enough to the task's own to overlap if
-                // both were open together.
-                setEditingDeadline(false)
+                closeDeadlineEditor()
                 setAddingSubtask(true)
               }}
-              className="font-medium text-sky-600 hover:text-sky-700 hover:underline"
+              className="mt-2 text-xs font-medium text-sky-600 hover:text-sky-700 hover:underline"
             >
-              Add subtasks
+              + Add another subtask
             </button>
-          </p>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setEditingDeadline(false)
-              setAddingSubtask(true)
-            }}
-            className="mt-2 text-xs font-medium text-sky-600 hover:text-sky-700 hover:underline"
-          >
-            + Add another subtask
-          </button>
-        )}
-      </div>
+          )}
+        </div>
+      )}
       </div>
     </div>
   )
