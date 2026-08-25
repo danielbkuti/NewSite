@@ -56,6 +56,15 @@ const COMPLETED_PREVIEW_COUNT = 3
 // staggered particle start delays).
 const CELEBRATION_MS = 1300
 
+// How long a just-checked subtask stays visible — checkmark filled in,
+// name crossed out — before it's actually allowed to drop out.
+// Comfortably over 1 second per spec. Owned here (not by TaskCard)
+// because a subtask can render in *two* places at once under the
+// due-date sort — bundled in its parent's cascade, and promoted to its
+// own standalone entry — and both need to cross out together
+// regardless of which one was actually clicked.
+const SUBTASK_CELEBRATION_MS = 1400
+
 export function TaskList() {
   // Sourced from the shared store (loaded once, at the authenticated
   // layout level) rather than an independent fetch of its own — this
@@ -68,6 +77,13 @@ export function TaskList() {
   // clears, so completing a task doesn't just instantly teleport it to
   // the bottom of the page.
   const [celebratingIds, setCelebratingIds] = useState(() => new Set())
+  // Same idea, for subtasks — kept separate from `celebratingIds`
+  // (task ids) since they're never compared against each other, just
+  // two different id namespaces. Shared by every TaskCard's cascade
+  // *and* every promoted standalone SubtaskStackCard this list renders
+  // directly (see renderEntry) — whichever one of the two a given
+  // subtask wasn't clicked from still needs to see it celebrating.
+  const [celebratingSubtaskIds, setCelebratingSubtaskIds] = useState(() => new Set())
   const [showOverdueGate, setShowOverdueGate] = useState(false)
   // Guards the overdue gate to a one-time check per page load — without
   // it, every subsequent task mutation (checking something off, adding
@@ -173,7 +189,24 @@ export function TaskList() {
     await refreshTask(task.id)
   }
 
+  // Marking complete (not reopening) holds the subtask in place —
+  // checked, struck through — in *both* of its possible renders (the
+  // cascade-bundled row and, if this subtask is currently promoted to
+  // its own entry, that standalone card too) for SUBTASK_CELEBRATION_MS
+  // before either is allowed to actually treat it as done. Same
+  // celebrate-then-mutate order as handleToggle above, for the same
+  // reason.
   async function handleToggleSubtask(task, subtask, completed) {
+    if (completed) {
+      setCelebratingSubtaskIds((current) => new Set(current).add(subtask.id))
+      setTimeout(() => {
+        setCelebratingSubtaskIds((current) => {
+          const next = new Set(current)
+          next.delete(subtask.id)
+          return next
+        })
+      }, SUBTASK_CELEBRATION_MS)
+    }
     await updateSubTask(subtask.id, { completed })
     await refreshTask(task.id)
   }
@@ -315,6 +348,7 @@ export function TaskList() {
         selectMode={selectMode}
         selected={selectedIds.has(task.id)}
         onSelectToggle={() => toggleSelected(task.id)}
+        celebratingSubtaskIds={celebratingSubtaskIds}
       />
     )
   }
@@ -330,7 +364,12 @@ export function TaskList() {
   // the task's normal preview only.
   const sortEntries = filteredActiveTasks.flatMap((task) => {
     const entries = [{ type: 'task', task, date: task.dateDeadline }]
-    const datedIncompleteSubtasks = task.subtasks.filter((s) => !s.completed && s.dateDeadline)
+    // A subtask mid-celebration stays promoted too — without this it'd
+    // vanish from its standalone spot the instant the check succeeds,
+    // never actually playing the cross-out it's meant to.
+    const datedIncompleteSubtasks = task.subtasks.filter(
+      (s) => (!s.completed || celebratingSubtaskIds.has(s.id)) && s.dateDeadline
+    )
     for (const subtask of datedIncompleteSubtasks) {
       entries.push({ type: 'subtask', task, subtask, date: subtask.dateDeadline })
     }
@@ -359,6 +398,7 @@ export function TaskList() {
       <SubtaskStackCard
         key={`subtask-${subtask.id}`}
         subtask={subtask}
+        justCompleted={celebratingSubtaskIds.has(subtask.id)}
         partOf={{
           label: `Part of "${task.name}"`,
           onClick: () => handleJumpToTask(task.id),

@@ -19,12 +19,39 @@ const INITIAL_PULSE_COUNT = 5
 // modal is covering the screen, so cards underneath it don't spend
 // their five pulses on a burst nobody can see; once the modal's
 // dismissed, `ready` flips true and the burst starts for real.
-export function PulseRing({ className, ready = true }) {
+//
+// `forceOnce` is a separate, manual one-shot trigger, independent of
+// `ready`/the page-load burst/the scroll-back-into-view nudge — used
+// to confirm "this value just changed" (e.g. a deadline was just
+// saved) rather than "this is currently urgent", so it fires even
+// while `ready` is false. Deliberately checked at both mount *and* on
+// change, not just a rising-edge comparison against a previous prop:
+// the badge this sits behind commonly gets replaced by an editor
+// popover while open and remounts fresh the instant it closes back
+// into a badge — exactly the moment a caller wants this to fire — so
+// a plain prop-change check would miss it (nothing to compare against
+// on a fresh instance). The caller is expected to flip `forceOnce`
+// back to false itself shortly after (a short timeout is enough,
+// comfortably longer than one pulse) so a *later*, unrelated remount
+// of the same badge doesn't replay it.
+export function PulseRing({ className, ready = true, forceOnce = false }) {
   const ref = useRef(null)
   // 'waiting' | 'initial' | 'idle' | 'once'
-  const [phase, setPhase] = useState(ready ? 'initial' : 'waiting')
+  const [phase, setPhase] = useState(() => {
+    if (forceOnce) return 'once'
+    return ready ? 'initial' : 'waiting'
+  })
   const wasVisibleRef = useRef(null)
   const prevReadyRef = useRef(ready)
+  const prevForceOnceRef = useRef(forceOnce)
+
+  useEffect(() => {
+    const prev = prevForceOnceRef.current
+    prevForceOnceRef.current = forceOnce
+    if (forceOnce && !prev) {
+      setPhase('once')
+    }
+  }, [forceOnce])
 
   // Reacts to `ready` actually *changing*, not just its value at
   // mount — the task list's own `ready` can briefly flash true right
@@ -40,7 +67,11 @@ export function PulseRing({ className, ready = true }) {
     const wasReady = prevReadyRef.current
     prevReadyRef.current = ready
     if (!ready) {
-      setPhase('waiting')
+      // Don't stomp a pulse `forceOnce` just started — this effect
+      // runs on mount too (alongside the `forceOnce` one above), and a
+      // badge that's both not-ready *and* just saved is exactly the
+      // common case (most saved deadlines aren't urgent).
+      setPhase((current) => (current === 'once' ? current : 'waiting'))
     } else if (!wasReady) {
       setPhase('initial')
     }

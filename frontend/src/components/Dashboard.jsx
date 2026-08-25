@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { SquarePlus, Target, CalendarDays, Sparkles, Clock } from 'lucide-react'
+import { SquarePlus, Target, CalendarDays, Sparkles } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Badge } from '@/components/ui/badge'
 import { TaskFeaturePreview } from '@/components/TaskFeaturePreview'
 import { PulseRing } from '@/components/PulseRing'
 import { cn } from '@/lib/utils'
@@ -19,6 +18,12 @@ function formatDeadline(iso) {
     timeZone: 'UTC',
   })
 }
+
+// A just-checked item stays in the list, checked and struck through,
+// for this long before it's actually allowed to drop out — same idea
+// (and duration) as the task list's own CELEBRATION_MS, so checking
+// something off here doesn't just make it instantly vanish.
+const CELEBRATION_MS = 1300
 
 // One of the three equal-width square shortcuts under the welcome
 // message. `accent` drives both the icon badge color and the soft
@@ -82,10 +87,13 @@ function ActionCard({ to, icon: Icon, title, description, accent, preview }) {
 // renderer. `taskId` is always the *task's* id (itself, for a task row;
 // its parent's, for a subtask row) since only tasks have their own
 // detail page — same convention as OverdueGateModal's item list.
-function UpcomingRow({ item, onToggle }) {
+function UpcomingRow({ item, celebrating, onToggle }) {
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
-  const { isOverdue, isUrgent } = useDeadlineStatus(item.dateDeadline, item.completed)
+  // `item.completed` already folds in the celebration flag (see the
+  // `upcoming` derivation below) — checked and struck through the
+  // instant you tick it, not just once the server confirms.
+  const { isOverdue, isUrgent, countdownDisplay } = useDeadlineStatus(item.dateDeadline, item.completed)
 
   async function handleToggle(checked) {
     setBusy(true)
@@ -113,22 +121,43 @@ function UpcomingRow({ item, onToggle }) {
         checked={item.completed}
         onCheckedChange={handleToggle}
         onClick={(e) => e.stopPropagation()}
-        disabled={busy}
+        disabled={busy || celebrating}
+        className="shrink-0 data-checked:border-emerald-500 data-checked:bg-emerald-500"
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-medium">{item.name}</span>
+        <span
+          className={cn(
+            'truncate text-sm font-medium transition-colors duration-300',
+            item.completed && 'text-muted-foreground line-through'
+          )}
+        >
+          {item.name}
+        </span>
         {item.kind === 'subtask' && (
           <span className="truncate text-xs text-muted-foreground">
             Part of {item.parentName}
           </span>
         )}
       </div>
+      {/* Same three-state badge (overdue / due-within-a-day countdown /
+          plain due date) as TaskCard's own due-date badge on the task
+          list, not the separate neutral Badge component this used to
+          be — under 24h out, this now ticks the same red "Due in:
+          HH:MM:SS" the list shows instead of just a static date. */}
       <div className="relative shrink-0">
         {(isOverdue || isUrgent) && <PulseRing />}
-        <Badge variant={isOverdue ? 'destructive' : 'outline'} className="relative gap-1">
-          <Clock className="size-3" />
-          {isOverdue ? 'Overdue' : formatDeadline(item.dateDeadline)}
-        </Badge>
+        <span
+          className={cn(
+            'relative rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums transition-colors',
+            isOverdue
+              ? 'bg-red-700 text-white'
+              : isUrgent
+                ? 'bg-red-50 text-red-700'
+                : 'bg-amber-50 text-amber-700'
+          )}
+        >
+          {isOverdue ? 'Overdue' : isUrgent ? `Due in: ${countdownDisplay}` : formatDeadline(item.dateDeadline)}
+        </span>
       </div>
     </div>
   )
@@ -137,15 +166,28 @@ function UpcomingRow({ item, onToggle }) {
 export function Dashboard({ firstName, username }) {
   const { tasks, status, refreshTasks } = useTaskStore()
   const displayName = firstName || username || 'there'
+  // Kind-prefixed ids (`task-3`, `subtask-9`) currently mid-celebration
+  // — kept in the list (checked, struck through) even though they're
+  // already `completed` server-side, until their timer clears. Same
+  // idea as TaskList's own `celebratingIds`, just keyed by kind+id
+  // since this list mixes tasks and subtasks together.
+  const [celebratingIds, setCelebratingIds] = useState(() => new Set())
+
+  function isCelebrating(kind, id) {
+    return celebratingIds.has(`${kind}-${id}`)
+  }
 
   // Flattens tasks + their subtasks into one list of not-yet-done items
   // that actually have a deadline, sorted soonest-first. A task whose
   // parent is already completed is skipped entirely — subtasks of a
-  // finished task aren't "upcoming" anything.
+  // finished task aren't "upcoming" anything — unless the task itself
+  // is what's mid-celebration, in which case its subtasks stay visible
+  // for the same window it does.
   const upcoming = tasks
-    .filter((task) => !task.completed)
+    .filter((task) => !task.completed || isCelebrating('task', task.id))
     .flatMap((task) => {
       const items = []
+      const taskCelebrating = isCelebrating('task', task.id)
       if (task.dateDeadline) {
         items.push({
           kind: 'task',
@@ -153,18 +195,19 @@ export function Dashboard({ firstName, username }) {
           taskId: task.id,
           name: task.name,
           dateDeadline: task.dateDeadline,
-          completed: task.completed,
+          completed: task.completed || taskCelebrating,
         })
       }
       for (const subtask of task.subtasks) {
-        if (subtask.dateDeadline && !subtask.completed) {
+        const subtaskCelebrating = isCelebrating('subtask', subtask.id)
+        if (subtask.dateDeadline && (!subtask.completed || subtaskCelebrating)) {
           items.push({
             kind: 'subtask',
             id: subtask.id,
             taskId: task.id,
             name: subtask.name,
             dateDeadline: subtask.dateDeadline,
-            completed: subtask.completed,
+            completed: subtask.completed || subtaskCelebrating,
             parentName: task.name,
           })
         }
@@ -178,8 +221,21 @@ export function Dashboard({ firstName, username }) {
   // field server-side (completing a task directly, or completing the
   // last subtask of one) — re-fetching the whole list afterward is
   // simpler and more correct than patching two different shapes of
-  // local state by hand.
+  // local state by hand. Marking complete (not reopening) also holds
+  // the row in place, checked and struck through, for CELEBRATION_MS
+  // before it's allowed to actually drop out of the list.
   async function handleToggle(item, checked) {
+    const key = `${item.kind}-${item.id}`
+    if (checked) {
+      setCelebratingIds((current) => new Set(current).add(key))
+      setTimeout(() => {
+        setCelebratingIds((current) => {
+          const next = new Set(current)
+          next.delete(key)
+          return next
+        })
+      }, CELEBRATION_MS)
+    }
     if (item.kind === 'task') {
       await updateTask(item.id, { completed: checked })
     } else {
@@ -247,7 +303,12 @@ export function Dashboard({ firstName, username }) {
         {status === 'ready' && upcoming.length > 0 && (
           <div className="flex flex-col gap-3">
             {upcoming.map((item) => (
-              <UpcomingRow key={`${item.kind}-${item.id}`} item={item} onToggle={handleToggle} />
+              <UpcomingRow
+                key={`${item.kind}-${item.id}`}
+                item={item}
+                celebrating={isCelebrating(item.kind, item.id)}
+                onToggle={handleToggle}
+              />
             ))}
           </div>
         )}
