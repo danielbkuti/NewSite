@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Trash2, CornerDownRight } from 'lucide-react'
+import { Trash2, CornerDownRight, TriangleAlert, Hourglass, CircleCheckBig, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AddSubtaskForm } from '@/components/AddSubtaskForm'
@@ -38,6 +38,194 @@ const COLLAPSED_PITCH = 12
 const EXPANDED_ROW_HEIGHT = 40
 const EXPANDED_PITCH = 48
 
+// --- Card-states.md: the four-state design system --------------------
+// A task (and, extended below, a standalone promoted subtask card) is
+// always in exactly one of these: 'progress' (on track), 'urgent' (due
+// <24h), 'overdue', or 'done'. Everything visual — banner colour/glyph,
+// ring accent, flood surface, resting shadow, heartbeat — is looked up
+// from here rather than forked per call site, per the handoff's "one
+// pattern, four tunings" instruction. Values here are things it's safe
+// to compute dynamically (hand-written CSS classes, or raw values fed
+// through inline `style`) — never a Tailwind arbitrary-value class,
+// since those need to appear as static literal text for Tailwind's
+// scanner to generate them (see the *_CLASS lookup objects below for
+// those instead).
+const STATE_CHROME = {
+  progress: {
+    flood: 'task-glass',
+    ring: undefined, // falls through to .task-ring's own default accent
+    shadow: '0 10px 30px -20px rgba(124,95,176,.4), 0 1px 2px rgba(37,37,37,.05)',
+    heartbeat: null,
+    glyph: Clock,
+    glyphBeat: null,
+    bannerFrom: '#6b46a8',
+    bannerTo: '#4f7fd4',
+  },
+  urgent: {
+    flood: 'task-glass-urgent',
+    ring: 'linear-gradient(135deg,#fb7c50,#e0562f 60%,#9a3412)',
+    shadow: '0 10px 30px -20px rgba(154,52,18,.38), 0 1px 2px rgba(37,37,37,.05)',
+    heartbeat: 'animate-pulse-ember',
+    glyph: Hourglass,
+    glyphBeat: '2.4s',
+    bannerFrom: '#9a3412',
+    bannerTo: '#d4451c',
+  },
+  overdue: {
+    flood: 'task-glass-overdue',
+    ring: 'linear-gradient(135deg,#f87171,#b91c1c 60%,#7f1d1d)',
+    shadow: '0 10px 30px -18px rgba(185,28,28,.45), 0 1px 2px rgba(37,37,37,.05)',
+    heartbeat: 'animate-pulse-red',
+    glyph: TriangleAlert,
+    glyphBeat: '1.8s',
+    bannerFrom: '#b91c1c',
+    bannerTo: '#dc2626',
+  },
+  done: {
+    flood: 'task-glass-done',
+    ring: 'linear-gradient(135deg,#6ee7b7,#059669 60%,#065f46)',
+    shadow: '0 10px 30px -18px rgba(5,150,105,.4), 0 1px 2px rgba(37,37,37,.05)',
+    heartbeat: null,
+    glyph: CircleCheckBig,
+    glyphBeat: null,
+    bannerFrom: '#047857',
+    bannerTo: '#059669',
+  },
+}
+
+// Literal Tailwind fragments per state — kept as static strings (never
+// built via template interpolation) so the JIT scanner can see them.
+// Only 'urgent'/'overdue'/'done' ever override the default look; a
+// missing key means "state doesn't touch this element" and callers fall
+// back to the existing default class themselves.
+const PILL_CLASS = {
+  urgent: 'bg-[#ffe8e0] text-[#7c2d12] hover:bg-[#ffd6c4]',
+  overdue: 'bg-[#fee2e2] text-[#7f1d1d] hover:bg-[#fecaca]',
+}
+const TITLE_CLASS = {
+  urgent: 'text-[#7c2d12]',
+  overdue: 'text-[#7f1d1d]',
+  done: 'line-through decoration-[rgba(4,120,87,0.5)] text-[#047857]',
+}
+const BADGE_CLASS = {
+  urgent: 'bg-[#ffe8e0] text-[#9a3412] hover:bg-[#ffd6c4]',
+  overdue: 'bg-[#fee2e2] text-[#b91c1c]',
+  done: 'bg-[#d1fae5] text-[#047857]',
+}
+const DELETE_CLASS = {
+  urgent: 'text-[#9a3412] hover:bg-[#ffe8e0] hover:text-[#9a3412]',
+  overdue: 'text-[#b91c1c] hover:bg-[#fee2e2] hover:text-[#b91c1c]',
+  done: 'text-[#047857] hover:bg-[#d1fae5] hover:text-[#047857]',
+}
+const TRACK_CLASS = {
+  urgent: 'border-[#fca98d] bg-[#ffe8e0]',
+  overdue: 'border-[#fca5a5] bg-[#fee2e2]',
+  done: 'border-[#6ee7b7] bg-[#d1fae5]',
+}
+const FILL_CLASS = {
+  overdue: 'bg-gradient-to-r from-[#f87171] to-[#b91c1c]',
+  done: 'bg-gradient-to-r from-[#34d399] to-[#059669]',
+  // urgent + progress keep PROGRESS_GRADIENT — an urgent deadline
+  // doesn't mean the work itself is behind, a red bar would lie.
+}
+const META_CLASS = {
+  urgent: 'text-[#9a3412]',
+  overdue: 'text-[#b91c1c]',
+  done: 'text-[#047857]',
+}
+const ROW_CLASS = {
+  urgent: 'border-[#fca98d] bg-white shadow-[0_1px_2px_rgba(154,52,18,.1)]',
+  overdue: 'border-[#fca5a5] bg-white shadow-[0_1px_2px_rgba(185,28,28,.1)]',
+  done: 'border-[#6ee7b7] bg-white shadow-[0_1px_2px_rgba(5,150,105,.1)]',
+}
+const CHECKBOX_BORDER_CLASS = {
+  urgent: 'border-[#fca98d]',
+  overdue: 'border-[#fca5a5]',
+}
+const CHIP_CLASS = {
+  urgent: 'bg-[#ffe8e0] text-[#9a3412] hover:bg-[#ffd6c4]',
+  done: 'bg-[#d1fae5] text-[#047857] hover:bg-[#bbf7d0]',
+}
+const BANNER_ACTION_HOVER_TEXT = {
+  progress: 'hover:text-[#6b46a8]',
+  overdue: 'hover:text-[#b91c1c]',
+  done: 'hover:text-[#047857]',
+}
+
+// The overdue banner's elapsed label wants a tighter shape than
+// useDeadlineStatus's own `overdueDisplay` ("N day(s), HH:MM:SS", always
+// with seconds) — "Xd HH:MM" once past a day, plain "HH:MM:SS" under it.
+// Same underlying 1s tick and source string, just reshaped for the banner.
+function formatOverdueElapsed(overdueDisplay) {
+  if (!overdueDisplay) return ''
+  const match = overdueDisplay.match(/^(\d+) days?, (\d{2}):(\d{2}):\d{2}$/)
+  if (!match) return overdueDisplay
+  const [, days, hh, mm] = match
+  return `${days}d ${hh}:${mm}`
+}
+
+function isSameLocalDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
+// A compact "3d 4h" / "5h 12m" / "40m" duration, for the in-progress
+// banner's "Next up" countdown — that one isn't urgent enough to need
+// useDeadlineStatus's own HH:MM:SS clock, and can be multiple days out.
+function formatDueInDays(ms) {
+  const totalMinutes = Math.max(0, Math.round(ms / 60000))
+  const days = Math.floor(totalMinutes / 1440)
+  const hours = Math.floor((totalMinutes % 1440) / 60)
+  const minutes = totalMinutes % 60
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}m`
+}
+
+function formatTimeOfDay(iso) {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+}
+
+// The shared banner anatomy every state renders (only the four tunings
+// above change): a full-bleed strip, first child of the card, glyph +
+// message + optional action. `state` looks up its own gradient/glyph;
+// `message`/`action` are state-specific text/handlers the caller builds.
+// Rounds its own top corners to match the card it sits in (`radiusClass`)
+// rather than relying on the card root clipping via `overflow-hidden` —
+// that clipped more than just the banner's corners, cutting off any
+// popover (the deadline editor) that opens from inside the card and
+// needs to float over whatever's below it on the page.
+function StateBanner({ state, message, action, radiusClass = 'rounded-t-2xl' }) {
+  const chrome = STATE_CHROME[state]
+  const Glyph = chrome.glyph
+  return (
+    <div
+      className={cn('flex items-center gap-2.5 py-[9px] pr-5 pl-[18px] text-white', radiusClass)}
+      style={{ background: `linear-gradient(90deg,${chrome.bannerFrom},${chrome.bannerTo})` }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <Glyph
+        className={cn('size-[15px] shrink-0', chrome.glyphBeat && 'animate-glyph-beat')}
+        strokeWidth={state === 'done' ? 2.6 : 2.4}
+        style={chrome.glyphBeat ? { animationDuration: chrome.glyphBeat } : undefined}
+        aria-hidden="true"
+      />
+      <span className="flex-1 text-[12.5px] font-black tracking-[0.01em] tabular-nums">{message}</span>
+      {action && (
+        <button
+          type="button"
+          onClick={action.onClick}
+          className={cn(
+            'shrink-0 rounded-full border border-white/[0.55] bg-white/[0.16] px-3 py-1 text-[11.5px] font-bold whitespace-nowrap transition-colors hover:bg-white',
+            BANNER_ACTION_HOVER_TEXT[state]
+          )}
+        >
+          {action.label}
+        </button>
+      )}
+    </div>
+  )
+}
+
 // One subtask card in the stack. The checkbox and the due-date bubble
 // are the interactive parts — the due-date bubble opens a small menu
 // (mark complete / change deadline) as an alternative path to the same
@@ -48,11 +236,12 @@ const EXPANDED_PITCH = 48
 // brief window (TaskList's own SUBTASK_CELEBRATION_MS) after checking
 // it off, during which the parent deliberately keeps rendering it here
 // instead of letting it drop out immediately — long enough for the
-// checkmark + strikethrough to actually read as an animation. Owned by
-// TaskList now, not this card, so the *other* copy of the same
-// subtask (its promoted standalone entry, or this cascade-bundled one,
-// whichever wasn't the one actually clicked) celebrates in step too —
-// see TaskCard's own `celebratingSubtaskIds` prop for why.
+// checkmark + strikethrough (and now the fireworks burst) to actually
+// read as an animation. Owned by TaskList now, not this card, so the
+// *other* copy of the same subtask (its promoted standalone entry, or
+// this cascade-bundled one, whichever wasn't the one actually clicked)
+// celebrates in step too — see TaskCard's own `celebratingSubtaskIds`
+// prop for why.
 //
 // `partOf` is what turns this from a stack row into a standalone card:
 // passed only when the task list promotes a subtask to its own spot in
@@ -71,6 +260,12 @@ export function SubtaskStackCard({
   onDelete,
   partOf,
   pulseReady = true,
+  // The *parent task's own* state ('progress' | 'urgent' | 'overdue' |
+  // 'done') — TaskCard passes this through for its cascade rows so the
+  // row surface reads as part of its flooded card. Unused by the
+  // `partOf` (promoted standalone) branch, which derives its own state
+  // below from the subtask's own status instead.
+  parentState = 'progress',
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [editingDeadline, setEditingDeadline] = useState(false)
@@ -85,7 +280,45 @@ export function SubtaskStackCard({
   const deleteRef = useRef(null)
   const menuRef = useRef(null)
   const checked = subtask.completed || justCompleted
-  const countdown = useDeadlineStatus(subtask.dateDeadline, checked)
+  const countdown = useDeadlineStatus(subtask.dateDeadline, checked, { liveOverdue: true })
+
+  // The promoted-standalone-card state, derived from this subtask's own
+  // status rather than any parent — 'progress' (on track, no banner:
+  // subtasks have nothing of their own to say when nothing's urgent),
+  // 'urgent'/'overdue' from the same countdown the due-chip already
+  // uses, or 'done' once checked.
+  const ownState = checked ? 'done' : countdown.isOverdue ? 'overdue' : countdown.isUrgent ? 'urgent' : 'progress'
+  // What actually colours this row's shared bits (checkbox, due chip,
+  // delete icon) — the parent's state for a cascade row, this
+  // subtask's own for a promoted one.
+  const effectiveState = partOf ? ownState : parentState
+
+  let subtaskBannerMessage = null
+  let subtaskBannerAction = null
+  if (ownState === 'overdue') {
+    subtaskBannerMessage = `Overdue by ${formatOverdueElapsed(countdown.overdueDisplay)} — was due ${formatDeadline(subtask.dateDeadline)}`
+    subtaskBannerAction = {
+      label: 'Reschedule',
+      onClick: (e) => {
+        e.stopPropagation()
+        setMenuOpen(false)
+        setEditingDeadline(true)
+      },
+    }
+  } else if (ownState === 'urgent') {
+    const dayLabel = isSameLocalDay(new Date(subtask.dateDeadline), new Date()) ? 'Due today' : 'Due tomorrow'
+    subtaskBannerMessage = `${dayLabel} in ${countdown.countdownDisplay}`
+  } else if (ownState === 'done') {
+    subtaskBannerMessage = subtask.dateCompleted ? `Completed ${formatDeadline(subtask.dateCompleted)}` : 'Completed'
+    subtaskBannerAction = {
+      label: 'Reopen',
+      onClick: (e) => {
+        e.stopPropagation()
+        onToggleComplete(false)
+      },
+    }
+  }
+  const showSubtaskBanner = partOf && ownState !== 'progress'
 
   useEffect(() => {
     if (!menuOpen) return
@@ -120,17 +353,6 @@ export function SubtaskStackCard({
     }
   }
 
-  async function handleMarkComplete(e) {
-    e.stopPropagation()
-    setMenuOpen(false)
-    setBusy(true)
-    try {
-      await onToggleComplete(true)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   // Checkbox.onCheckedChange hands back a boolean, not an event — the
   // stopPropagation happens via the Checkbox's own onClick instead.
   async function handleCheckboxChange(value) {
@@ -156,12 +378,15 @@ export function SubtaskStackCard({
         onCheckedChange={handleCheckboxChange}
         onClick={(e) => e.stopPropagation()}
         disabled={busy || justCompleted}
-        className="shrink-0 data-checked:border-emerald-500 data-checked:bg-emerald-500"
+        className={cn(
+          'shrink-0 data-checked:border-emerald-500 data-checked:bg-emerald-500',
+          !checked && CHECKBOX_BORDER_CLASS[effectiveState]
+        )}
       />
       <span
         className={cn(
           'flex-1 truncate font-medium transition-colors duration-300',
-          checked && 'text-muted-foreground line-through'
+          checked && (effectiveState === 'done' ? TITLE_CLASS.done : 'text-muted-foreground line-through')
         )}
       >
         {subtask.name}
@@ -190,25 +415,23 @@ export function SubtaskStackCard({
                 ? 'bg-red-700 text-white hover:bg-red-800'
                 : countdown.isUrgent
                   ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                  : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                  : effectiveState === 'done' && checked
+                    ? CHIP_CLASS.done
+                    : effectiveState === 'urgent'
+                      ? CHIP_CLASS.urgent
+                      : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
             )}
           >
-            {countdown.isOverdue
-              ? 'Overdue'
-              : countdown.isUrgent
-                ? `Due in: ${countdown.countdownDisplay}`
-                : `Due ${formatDeadline(subtask.dateDeadline)}`}
+            {effectiveState === 'done' && checked
+              ? 'Done'
+              : countdown.isOverdue
+                ? 'Overdue'
+                : countdown.isUrgent
+                  ? `Due in: ${countdown.countdownDisplay}`
+                  : `Due ${formatDeadline(subtask.dateDeadline)}`}
           </button>
           {menuOpen && (
             <div className="absolute top-full right-0 z-10 mt-1 w-40 overflow-hidden rounded-lg border bg-card py-1 shadow-lg">
-              <button
-                type="button"
-                onClick={handleMarkComplete}
-                disabled={busy}
-                className="block w-full px-3 py-1.5 text-left text-[11px] font-medium hover:bg-muted"
-              >
-                Mark as completed
-              </button>
               <button
                 type="button"
                 onClick={(e) => {
@@ -259,7 +482,10 @@ export function SubtaskStackCard({
               setConfirmingDelete(true)
             }}
             aria-label="Delete subtask"
-            className="text-muted-foreground transition-colors hover:text-destructive"
+            className={cn(
+              'transition-colors',
+              effectiveState === 'progress' ? 'text-muted-foreground hover:text-destructive' : DELETE_CLASS[effectiveState]
+            )}
           >
             <Trash2 className="size-3.5" />
           </button>
@@ -273,10 +499,15 @@ export function SubtaskStackCard({
       <div
         className={cn(
           'absolute inset-x-0 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-all duration-300 ease-in-out',
-          dimmed ? 'bg-muted/60 text-muted-foreground shadow-none' : 'bg-card shadow-sm'
+          dimmed
+            ? 'bg-muted/60 text-muted-foreground shadow-none'
+            : parentState !== 'progress'
+              ? ROW_CLASS[parentState]
+              : 'bg-card shadow-sm'
         )}
         style={style}
       >
+        {justCompleted && <ConfettiBurst />}
         {rowContent}
       </div>
     )
@@ -288,40 +519,41 @@ export function SubtaskStackCard({
   // border, below it — not a separate floating line above the card.
   // Bare text + arrow, grey by default and blue only on hover, same
   // hover-reveal restraint as the rest of the app's hint text. Same
-  // glass-lustre surface + gradient border ring as the main TaskCard
-  // (see .task-glass/.task-ring in index.css) — this is the one place
-  // a subtask stands as its own list entry rather than living inside
-  // a task's cascade, so it gets the same "this is a real card"
-  // treatment. Ring accent follows the same rule: emerald once
-  // checked, red once overdue, the default app gradient otherwise —
-  // just keyed off this subtask's own status instead of a task's.
+  // state system as the main TaskCard (glass-lustre/gradient-ring/
+  // banner/heartbeat — see STATE_CHROME above), just keyed off this
+  // subtask's own status (`ownState`) instead of a task's — this is
+  // the one place a subtask stands as its own list entry rather than
+  // living inside a task's cascade, so it earns the same "this is a
+  // real card" treatment. No banner while on track (`ownState ===
+  // 'progress'`): a subtask has no "next up" of its own to report, so
+  // — same as the main card's philosophy — it stays quiet.
+  const chrome = STATE_CHROME[ownState]
   return (
     <div
       className={cn(
-        'task-glass relative flex flex-col gap-2 rounded-lg px-3 py-2 text-xs transition-all duration-300 ease-in-out',
-        dimmed ? 'bg-muted/60 text-muted-foreground shadow-none' : 'bg-card shadow-sm'
+        chrome.flood,
+        'relative rounded-lg text-xs transition-all duration-300 ease-in-out',
+        showSubtaskBanner ? 'p-0' : 'flex flex-col gap-2 bg-card px-3 py-2 shadow-sm',
+        chrome.heartbeat
       )}
+      style={showSubtaskBanner ? { boxShadow: chrome.shadow } : undefined}
     >
-      <span
-        aria-hidden="true"
-        className="task-ring"
-        style={{
-          '--task-accent': checked
-            ? 'linear-gradient(135deg,#34d399,#059669)'
-            : countdown.isOverdue
-              ? 'linear-gradient(135deg,#ef4444,#b91c1c)'
-              : undefined,
-        }}
-      />
-      <div className="flex items-center gap-2">{rowContent}</div>
-      <button
-        type="button"
-        onClick={partOf.onClick}
-        className="flex w-fit items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-sky-600"
-      >
-        <CornerDownRight className="size-3.5 shrink-0" aria-hidden="true" />
-        <span className="truncate">{partOf.label}</span>
-      </button>
+      <span aria-hidden="true" className="task-ring" style={{ '--task-accent': chrome.ring }} />
+      {justCompleted && <ConfettiBurst />}
+      {showSubtaskBanner && (
+        <StateBanner state={ownState} message={subtaskBannerMessage} action={subtaskBannerAction} radiusClass="rounded-t-lg" />
+      )}
+      <div className={showSubtaskBanner ? 'flex flex-col gap-2 px-3 pt-2.5 pb-2' : 'contents'}>
+        <div className="flex items-center gap-2">{rowContent}</div>
+        <button
+          type="button"
+          onClick={partOf.onClick}
+          className="flex w-fit items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-sky-600"
+        >
+          <CornerDownRight className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{partOf.label}</span>
+        </button>
+      </div>
     </div>
   )
 }
@@ -344,6 +576,18 @@ export function SubtaskStackCard({
 export function PendingCompleteButton({ task, blocked, onClick }) {
   const [hoverPreview, setHoverPreview] = useState(false)
   const timerRef = useRef(null)
+  // Same status this button's card already computes for its ring/banner —
+  // derived here too (task carries everything needed) rather than a new
+  // prop, so the idle pill can go red/ember-flagged without widening the
+  // component's own contract.
+  const countdown = useDeadlineStatus(task.dateDeadline, task.completed)
+  const idleState = task.completed
+    ? 'done'
+    : countdown.isOverdue
+      ? 'overdue'
+      : countdown.isUrgent
+        ? 'urgent'
+        : 'progress'
 
   function handleMouseEnter() {
     if (blocked) return
@@ -370,9 +614,11 @@ export function PendingCompleteButton({ task, blocked, onClick }) {
       title={blocked ? 'Complete all subtasks first' : task.completed ? 'Click to mark as pending again' : undefined}
       className={cn(
         'group relative shrink-0 overflow-hidden rounded-full px-4 py-1.5 text-sm font-semibold transition-colors',
-        task.completed
-          ? cn(PROGRESS_GRADIENT, 'text-white hover:opacity-90')
-          : 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        idleState === 'done'
+          ? 'bg-gradient-to-r from-[#34d399] to-[#059669] text-white hover:opacity-90'
+          : idleState === 'progress'
+            ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+            : cn(PILL_CLASS[idleState], 'hover:bg-secondary'),
         blocked && 'cursor-not-allowed opacity-60 hover:bg-secondary'
       )}
     >
@@ -476,7 +722,14 @@ export function TaskCard({
   }
 
   const progress = calculateProgress(task)
-  const countdown = useDeadlineStatus(task.dateDeadline, task.completed)
+  // `liveOverdue: true` so the overdue banner's elapsed label actually
+  // ticks — list cards previously opted out of this (a static "Overdue"
+  // badge was enough before there was a live duration to show).
+  const countdown = useDeadlineStatus(task.dateDeadline, task.completed, { liveOverdue: true })
+  // The card's overall state — drives the banner, ring, flood surface,
+  // shadow, and heartbeat below, plus every colour swap in the body.
+  const state = task.completed ? 'done' : countdown.isOverdue ? 'overdue' : countdown.isUrgent ? 'urgent' : 'progress'
+  const chrome = STATE_CHROME[state]
 
   // Completing a task is gated on every subtask already being done —
   // this only blocks the pending -> completed direction; reopening an
@@ -484,6 +737,7 @@ export function TaskCard({
   // state.
   const hasIncompleteSubtasks = task.subtasks.some((s) => !s.completed)
   const blockedFromCompleting = !task.completed && hasIncompleteSubtasks
+  const incompleteSubtaskCount = task.subtasks.filter((s) => !s.completed).length
 
   function handleToggleClick() {
     if (blockedFromCompleting) return
@@ -518,12 +772,67 @@ export function TaskCard({
   const stackHeight = rows.length > 0 ? (rows.length - 1) * pitch + rowHeight : 0
   const hasMoreThanShown = task.subtasks.length > rows.length
 
+  // The soonest dated, still-incomplete subtask — what the 'progress'
+  // (on-track) state's banner surfaces as "Next up", when there is one.
+  // Called unconditionally (same as every other useDeadlineStatus call
+  // on this card) even outside the 'progress' state, since hooks can't
+  // be conditional; harmless to compute when unused.
+  const nextUpSubtask = dueSubtasks[0] ?? null
+  const nextUpCountdown = useDeadlineStatus(nextUpSubtask?.dateDeadline ?? null, false)
+
   function handleStackKeyDown(e) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
       setExpanded((v) => !v)
     }
   }
+
+  // Banner copy + action per state — the one thing that's genuinely
+  // different across all four, everything else in STATE_CHROME/the
+  // *_CLASS lookups is just colour. 'progress' only gets a banner when
+  // there's an actual next-due subtask to report; a card with nothing
+  // urgent to say stays quiet, same rule the other states don't need
+  // (they always have something to report).
+  let bannerMessage = null
+  let bannerAction = null
+  if (state === 'overdue') {
+    bannerMessage = `Overdue by ${formatOverdueElapsed(countdown.overdueDisplay)} — was due ${formatDeadline(task.dateDeadline)}`
+    bannerAction = {
+      label: 'Reschedule',
+      onClick: (e) => {
+        e.stopPropagation()
+        setAddingSubtask(false)
+        setEditingDeadline(true)
+      },
+    }
+  } else if (state === 'urgent') {
+    const dayLabel = isSameLocalDay(new Date(task.dateDeadline), new Date()) ? 'Due today' : 'Due tomorrow'
+    const openClause = incompleteSubtaskCount > 0 ? ` — ${incompleteSubtaskCount} subtask${incompleteSubtaskCount === 1 ? '' : 's'} still open` : ''
+    bannerMessage = `${dayLabel} in ${countdown.countdownDisplay}${openClause}`
+    // No action button for this state — the message spans full width.
+  } else if (state === 'done') {
+    bannerMessage = task.dateCompleted ? `Completed ${formatDeadline(task.dateCompleted)}` : 'Completed'
+    bannerAction = {
+      label: 'Reopen',
+      onClick: (e) => {
+        e.stopPropagation()
+        handleToggleClick()
+      },
+    }
+  } else if (nextUpSubtask) {
+    const dueTail = nextUpCountdown.isOverdue
+      ? 'now overdue'
+      : `due in ${nextUpCountdown.isUrgent ? nextUpCountdown.countdownDisplay : formatDueInDays(new Date(nextUpSubtask.dateDeadline).getTime() - Date.now())}`
+    bannerMessage = `Next up: ${nextUpSubtask.name} — ${dueTail}`
+    bannerAction = {
+      label: 'Open',
+      onClick: (e) => {
+        e.stopPropagation()
+        setExpanded(true)
+      },
+    }
+  }
+  const showBanner = bannerMessage !== null
 
   return (
     // The whole card opens the task detail page — everything that
@@ -535,28 +844,29 @@ export function TaskCard({
       id={`task-${task.id}`}
       onClick={() => (selectMode ? onSelectToggle?.() : navigate(`/tasks/${task.id}`))}
       className={cn(
-        'task-glass relative w-full cursor-pointer rounded-2xl bg-card p-5 shadow-sm',
+        chrome.flood,
+        'relative w-full cursor-pointer rounded-2xl bg-card',
         'transition-[transform,box-shadow] duration-300 ease-out',
-        'hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-18px_rgba(124,95,176,0.38)]',
+        'hover:-translate-y-0.5',
+        showBanner ? 'p-0' : 'p-5',
+        chrome.heartbeat,
         selected && 'ring-2 ring-sky-400'
       )}
+      style={{ boxShadow: chrome.shadow }}
     >
       {/* Gradient border ring — purely decorative overlay, replaces the flat
-          `border`. Accent tracks status: the app gradient normally, red when
-          overdue, emerald once completed. */}
-      <span
-        aria-hidden="true"
-        className="task-ring"
-        style={{
-          '--task-accent': task.completed
-            ? 'linear-gradient(135deg,#34d399,#059669)'
-            : countdown.isOverdue
-              ? 'linear-gradient(135deg,#ef4444,#b91c1c)'
-              : undefined,
-        }}
-      />
+          `border`. Accent tracks state: purple in progress, ember urgent,
+          red overdue, emerald done. Sits above the banner (see .task-ring's
+          z-index) so it isn't clipped under it. */}
+      <span aria-hidden="true" className="task-ring" style={{ '--task-accent': chrome.ring }} />
       {celebrating && <ConfettiBurst />}
 
+      {/* ---- state banner: full-bleed, states the fact and (usually)
+          offers the fix. Silent only for an on-track task with nothing
+          due soon among its subtasks. ---- */}
+      {showBanner && <StateBanner state={state} message={bannerMessage} action={bannerAction} />}
+
+      <div className={showBanner ? 'px-5 pt-4 pb-5' : ''}>
       {/* ---- header row: status toggle, name, due date, delete ---- */}
       <div className="flex items-center gap-4">
         {selectMode && (
@@ -573,23 +883,14 @@ export function TaskCard({
         <span
           className={cn(
             'flex-1 truncate text-lg font-semibold',
-            task.completed && 'text-muted-foreground line-through'
+            state === 'done' ? TITLE_CLASS.done : TITLE_CLASS[state]
           )}
         >
           {task.name}
         </span>
 
         <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-          {task.completed ? (
-            // Once completed, this slot shows when it was finished
-            // rather than the (now moot) deadline — not editable, just
-            // a record. Older tasks completed before dateCompleted
-            // existed won't have one; the label still makes sense
-            // without a date.
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-              Completed{task.dateCompleted ? ` ${formatDeadline(task.dateCompleted)}` : ''}
-            </span>
-          ) : editingDeadline ? (
+          {editingDeadline ? (
             <div className="relative">
               <DeadlineEditor
                 value={task.dateDeadline}
@@ -598,36 +899,60 @@ export function TaskCard({
                 minDayOffset={0}
               />
             </div>
-          ) : (
+          ) : state === 'done' ? (
+            // The banner now carries the completion date/outcome — this
+            // slot repurposes into a quieter subtask summary, and drops
+            // out entirely for a task with none.
+            task.subtasks.length > 0 && (
+              <span className={cn('rounded-full px-3 py-1 text-xs font-medium', BADGE_CLASS.done)}>
+                All {task.subtasks.length} done
+              </span>
+            )
+          ) : state === 'overdue' ? (
+            // Same idea — the banner already carries the countdown.
+            incompleteSubtaskCount > 0 && (
+              <span className={cn('rounded-full px-3 py-1 text-xs font-medium', BADGE_CLASS.overdue)}>
+                {incompleteSubtaskCount} subtask{incompleteSubtaskCount === 1 ? '' : 's'} left
+              </span>
+            )
+          ) : state === 'urgent' ? (
+            // Also carried by the banner now — the badge quiets down to
+            // a plain time-of-day rather than repeating the live
+            // countdown. PulseRing stays here (unlike overdue/done): the
+            // ping plus the ember heartbeat is exactly the layered
+            // urgency this state was built for.
             <span className="relative inline-flex">
-              <PulseRing ready={(countdown.isOverdue || countdown.isUrgent) && pulseReady} forceOnce={justSavedDeadline} />
+              <PulseRing ready={pulseReady} forceOnce={justSavedDeadline} className="bg-[#ea580c] opacity-[.7]" />
               <button
                 type="button"
                 onClick={() => {
-                  // The add-subtask form (once open) has its own
-                  // deadline picker directly underneath it — open at
-                  // the same time as this one, the two floating
-                  // DeadlineEditor popovers can land close enough to
-                  // overlap. Only one deadline editor open per card.
                   setAddingSubtask(false)
                   setEditingDeadline(true)
                 }}
                 className={cn(
                   'relative rounded-full px-3 py-1 text-xs font-medium tabular-nums transition-colors',
-                  countdown.isOverdue
-                    ? 'bg-red-700 text-white hover:bg-red-800'
-                    : countdown.isUrgent
-                      ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                      : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                  BADGE_CLASS.urgent
                 )}
               >
-                {countdown.isOverdue
-                  ? 'Overdue'
-                  : countdown.isUrgent
-                    ? `Due in: ${countdown.countdownDisplay}`
-                    : task.dateDeadline
-                      ? `Due ${formatDeadline(task.dateDeadline)}`
-                      : 'Set deadline'}
+                Due {formatTimeOfDay(task.dateDeadline)}
+              </button>
+            </span>
+          ) : (
+            // 'progress' — unchanged from before Card-states.md: still
+            // the quick way to see/set this task's own deadline from
+            // the list, deliberately kept rather than repurposed into a
+            // subtask-count badge (that would remove the only quick
+            // deadline entry point this card has).
+            <span className="relative inline-flex">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddingSubtask(false)
+                  setEditingDeadline(true)
+                }}
+                className="relative rounded-full bg-amber-50 px-3 py-1 text-xs font-medium tabular-nums text-amber-700 transition-colors hover:bg-amber-100"
+              >
+                {task.dateDeadline ? `Due ${formatDeadline(task.dateDeadline)}` : 'Set deadline'}
               </button>
             </span>
           )}
@@ -653,7 +978,7 @@ export function TaskCard({
               variant="ghost"
               onClick={() => setConfirmingDelete(true)}
               aria-label="Delete task"
-              className="hover:text-destructive"
+              className={state === 'progress' ? 'hover:text-destructive' : DELETE_CLASS[state]}
             >
               <Trash2 />
             </Button>
@@ -671,15 +996,23 @@ export function TaskCard({
             Complete all subtasks to mark this task done.
           </div>
         )}
-        <div className="h-2 w-full overflow-hidden rounded-full border border-border bg-muted">
+        <div
+          className={cn(
+            'h-2 w-full overflow-hidden rounded-full border',
+            state === 'progress' ? 'border-border bg-muted' : TRACK_CLASS[state]
+          )}
+        >
           <div
             className={cn(
               'relative h-full overflow-hidden rounded-full transition-all duration-500 ease-out',
-              PROGRESS_GRADIENT
+              FILL_CLASS[state] ?? PROGRESS_GRADIENT
             )}
             style={{ width: `${progress}%` }}
           >
-            {progress > 0 && progress < 100 && (
+            {/* A shimmering sheen reads as healthy progress — dropped for
+                overdue/done, where a moving highlight would send the
+                wrong signal (either "still going" or "still working"). */}
+            {state !== 'overdue' && state !== 'done' && progress > 0 && progress < 100 && (
               <span
                 aria-hidden="true"
                 className="animate-progress-sheen absolute inset-y-0 w-2/5 bg-gradient-to-r from-transparent via-white/70 to-transparent"
@@ -687,7 +1020,9 @@ export function TaskCard({
             )}
           </div>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">{progress}% complete</p>
+        <p className={cn('mt-1 text-xs', state === 'progress' ? 'text-muted-foreground' : cn('font-bold', META_CLASS[state]))}>
+          {progress}% complete
+        </p>
       </div>
 
       {/* ---- subtask stack: click the top card to spread the (up to 3)
@@ -721,6 +1056,7 @@ export function TaskCard({
                   subtask={subtask}
                   dimmed={!expanded && i > 0}
                   justCompleted={celebratingSubtaskIds.has(subtask.id)}
+                  parentState={state}
                   style={{
                     top: `${i * pitch}px`,
                     height: `${rowHeight}px`,
@@ -800,6 +1136,7 @@ export function TaskCard({
             + Add another subtask
           </button>
         )}
+      </div>
       </div>
     </div>
   )
