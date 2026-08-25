@@ -569,7 +569,15 @@ export function TaskCard({
               <PulseRing ready={(countdown.isOverdue || countdown.isUrgent) && pulseReady} forceOnce={justSavedDeadline} />
               <button
                 type="button"
-                onClick={() => setEditingDeadline(true)}
+                onClick={() => {
+                  // The add-subtask form (once open) has its own
+                  // deadline picker directly underneath it — open at
+                  // the same time as this one, the two floating
+                  // DeadlineEditor popovers can land close enough to
+                  // overlap. Only one deadline editor open per card.
+                  setAddingSubtask(false)
+                  setEditingDeadline(true)
+                }}
                 className={cn(
                   'relative rounded-full px-3 py-1 text-xs font-medium tabular-nums transition-colors',
                   countdown.isOverdue
@@ -709,7 +717,7 @@ export function TaskCard({
           {addingSubtask ? (
             <div className="mt-4">
               <AddSubtaskForm
-                onAdd={(name) => onAddSubtask(task, name)}
+                onAdd={(name, dateDeadline) => onAddSubtask(task, name, dateDeadline)}
                 onCancel={() => setAddingSubtask(false)}
               />
             </div>
@@ -718,7 +726,15 @@ export function TaskCard({
               Want to break this down into smaller chunks?{' '}
               <button
                 type="button"
-                onClick={() => setAddingSubtask(true)}
+                onClick={() => {
+                  // Same mutual-exclusion reasoning as the deadline
+                  // badge's own onClick above — this form is about to
+                  // grow its own deadline picker directly underneath
+                  // it, close enough to the task's own to overlap if
+                  // both were open together.
+                  setEditingDeadline(false)
+                  setAddingSubtask(true)
+                }}
                 className="font-medium text-sky-600 hover:text-sky-700 hover:underline"
               >
                 Add subtasks

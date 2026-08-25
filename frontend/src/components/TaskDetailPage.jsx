@@ -104,9 +104,13 @@ export function TaskDetailPage() {
     const action = searchParams.get('action')
     if (!action || !task) return
     if (action === 'subtask') {
+      // Mutual exclusion with the task's own deadline editor — see
+      // openAddSubtask's comment below for why.
+      setEditingDeadline(false)
       setAddingSubtask(true)
       subtaskSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     } else if (action === 'deadline') {
+      setAddingSubtask(false)
       setEditingDeadline(true)
       deadlineSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
@@ -157,9 +161,19 @@ export function TaskDetailPage() {
   // Same "create then re-fetch" pattern as the toggle handler below —
   // this page had no way to add a subtask at all before, only the
   // /tasks list's cascade could.
-  async function handleAddSubtask(name) {
-    await createSubTask({ task: id, name })
+  async function handleAddSubtask(name, dateDeadline) {
+    await createSubTask({ task: id, name, dateDeadline })
     await refreshTask(id)
+  }
+
+  // The add-subtask form grows its own deadline picker directly
+  // underneath it once open — at the same time as the task's own
+  // deadline editor (above, near the title), the two floating
+  // DeadlineEditor popovers can land close enough to overlap. Only
+  // one deadline editor open on the page at a time.
+  function openAddSubtask() {
+    setEditingDeadline(false)
+    setAddingSubtask(true)
   }
 
   // Rename the task or a subtask — neither was possible anywhere in
@@ -422,7 +436,15 @@ export function TaskDetailPage() {
               <PulseRing ready={deadlineStatus.isOverdue} forceOnce={justSavedDeadline} />
               <button
                 type="button"
-                onClick={() => setEditingDeadline(true)}
+                onClick={() => {
+                  // The add-subtask form (once open) grows its own
+                  // deadline picker directly underneath it — open at
+                  // the same time as this one, the two floating
+                  // DeadlineEditor popovers can land close enough to
+                  // overlap. Only one deadline editor open at a time.
+                  setAddingSubtask(false)
+                  setEditingDeadline(true)
+                }}
                 className={cn(
                   'relative rounded-full px-3 py-1 text-xs font-medium tabular-nums transition-colors',
                   deadlineStatus.isOverdue
@@ -481,7 +503,7 @@ export function TaskDetailPage() {
             Want to break this down into smaller chunks?{' '}
             <button
               type="button"
-              onClick={() => setAddingSubtask(true)}
+              onClick={openAddSubtask}
               className="font-medium text-sky-600 hover:text-sky-700 hover:underline"
             >
               Add subtasks
@@ -490,7 +512,7 @@ export function TaskDetailPage() {
         ) : (
           <button
             type="button"
-            onClick={() => setAddingSubtask(true)}
+            onClick={openAddSubtask}
             className="text-xs font-medium text-sky-600 hover:text-sky-700 hover:underline"
           >
             + Add another subtask

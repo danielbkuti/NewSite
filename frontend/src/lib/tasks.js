@@ -53,10 +53,14 @@ export function fetchTask(id) {
   return apiFetch(`/api/tasks/${id}/`)
 }
 
-export function createSubTask({ task, name }) {
+export function createSubTask({ task, name, dateDeadline }) {
   return apiFetch('/api/subtasks/', {
     method: 'POST',
-    body: { task, name },
+    // `dateDeadline` lands as `undefined` when the caller doesn't pass
+    // one (most creation flows don't) — JSON.stringify drops undefined
+    // keys, so the request just omits it rather than sending an
+    // explicit null.
+    body: { task, name, dateDeadline },
   })
 }
 

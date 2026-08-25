@@ -184,8 +184,8 @@ export function TaskList() {
     await refreshTaskInStore(taskId)
   }
 
-  async function handleAddSubtask(task, name) {
-    await createSubTask({ task: task.id, name })
+  async function handleAddSubtask(task, name, dateDeadline) {
+    await createSubTask({ task: task.id, name, dateDeadline })
     await refreshTask(task.id)
   }
 
