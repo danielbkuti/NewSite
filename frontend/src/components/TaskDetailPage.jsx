@@ -480,6 +480,7 @@ export function TaskDetailPage() {
               <SubtaskDetailRow
                 subtask={subtask}
                 checked={checked}
+                celebrating={celebratingIds.has(subtask.id)}
                 busy={busyIds.has(subtask.id)}
                 onToggle={(value) => handleToggleSubtask(subtask, value)}
                 onRename={(name) => handleRenameSubtask(subtask, name)}
@@ -553,7 +554,7 @@ export function TaskDetailPage() {
 // "Overdue" badge + the plain due date is enough there), the detail
 // page is where someone's actually looking at one task, so the "how
 // overdue" duration ticks for real, in days once it runs past 24h.
-function SubtaskDetailRow({ subtask, checked, busy, onToggle, onRename, onDelete }) {
+function SubtaskDetailRow({ subtask, checked, celebrating, busy, onToggle, onRename, onDelete }) {
   const status = useDeadlineStatus(subtask.dateDeadline, checked, { liveOverdue: true })
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -584,7 +585,8 @@ function SubtaskDetailRow({ subtask, checked, busy, onToggle, onRename, onDelete
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm transition-colors duration-300">
+    <div className="relative flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm transition-colors duration-300">
+      {celebrating && <ConfettiBurst />}
       <Checkbox
         checked={checked}
         onCheckedChange={onToggle}

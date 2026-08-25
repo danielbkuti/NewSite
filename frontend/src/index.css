@@ -185,6 +185,7 @@
   pointer-events: none;
   position: absolute;
   inset: 0;
+  z-index: 2;
   border-radius: inherit;
   padding: 3px;
   background: var(--task-accent);
@@ -220,4 +221,96 @@
 }
 .animate-progress-sheen {
   animation: progress-sheen 2.4s ease-in-out infinite;
+}
+
+/* --- ConfettiBurst (fireworks) ------------------------------------------
+   One shell = rise → flash → ring → sparks. All four run off the same
+   burst timestamp, so a shell reads as a single event. Custom properties
+   are set inline per particle (deterministic, from the index). */
+@keyframes fw-rise {
+  0%   { transform: translateY(var(--from)) scaleY(1.5); opacity: 0; }
+  18%  { opacity: 1; }
+  82%  { opacity: 1; }
+  100% { transform: translateY(0) scaleY(0.6); opacity: 0; }
+}
+@keyframes fw-flash {
+  0%   { transform: scale(0.2); opacity: 0.9; }
+  100% { transform: scale(3.4); opacity: 0; }
+}
+@keyframes fw-ring {
+  0%   { transform: scale(0.15); opacity: 0.8; border-width: 3px; }
+  100% { transform: scale(1);    opacity: 0;   border-width: 1px; }
+}
+@keyframes fw-spark {
+  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: translate(var(--sx), var(--sy)) scale(0.2); opacity: 0; }
+}
+
+/* --- TaskCard: overdue lustre -------------------------------------------
+   Same geometry as .task-glass, red stops, plus a warm off-white base so
+   the tint survives on top of bg-card. */
+.task-glass-overdue {
+  background-image:
+    linear-gradient(152deg, rgb(255 255 255 / 0.92) 0%, rgb(254 202 202 / 0.55) 24%, rgb(255 255 255 / 0) 62%),
+    linear-gradient(300deg, rgb(239 68 68 / 0.14) 0%, rgb(255 255 255 / 0) 44%);
+  background-color: #fffafa;
+}
+
+/* --- TaskCard: urgent lustre (due <24h) ---------------------------------
+   Same geometry as .task-glass, ember (burnt-orange) stops at ~2/3 the
+   alpha of .task-glass-overdue, over a barely-warm base. */
+.task-glass-urgent {
+  background-image:
+    linear-gradient(152deg, rgb(255 255 255 / 0.92) 0%, rgb(254 205 190 / 0.5) 24%, rgb(255 255 255 / 0) 60%),
+    linear-gradient(300deg, rgb(234 88 12 / 0.12) 0%, rgb(255 255 255 / 0) 44%);
+  background-color: #fffaf8;
+}
+
+/* --- TaskCard: completed lustre ----------------------------------------- */
+.task-glass-done {
+  background-image:
+    linear-gradient(152deg, rgb(255 255 255 / 0.92) 0%, rgb(167 243 208 / 0.5) 24%, rgb(255 255 255 / 0) 62%),
+    linear-gradient(300deg, rgb(16 185 129 / 0.14) 0%, rgb(255 255 255 / 0) 44%);
+  background-color: #f8fffb;
+}
+
+/* --- TaskCard: overdue heartbeat ---------------------------------------
+   Double beat then rest — a metronome reads as a loading state, a
+   heartbeat reads as urgency. The spread ring expands to 10px and fades;
+   the drop shadow deepens slightly on each beat. */
+@keyframes pulse-red {
+  0%   { box-shadow: 0 10px 30px -18px rgb(185 28 28 / 0.45), 0 1px 2px rgb(37 37 37 / 0.05), 0 0 0 0    rgb(185 28 28 / 0.5); }
+  22%  { box-shadow: 0 14px 34px -18px rgb(185 28 28 / 0.55), 0 1px 2px rgb(37 37 37 / 0.05), 0 0 0 10px rgb(185 28 28 / 0); }
+  44%  { box-shadow: 0 10px 30px -18px rgb(185 28 28 / 0.45), 0 1px 2px rgb(37 37 37 / 0.05), 0 0 0 0    rgb(185 28 28 / 0.38); }
+  66%  { box-shadow: 0 12px 32px -18px rgb(185 28 28 / 0.5),  0 1px 2px rgb(37 37 37 / 0.05), 0 0 0 8px  rgb(185 28 28 / 0); }
+  100% { box-shadow: 0 10px 30px -18px rgb(185 28 28 / 0.45), 0 1px 2px rgb(37 37 37 / 0.05), 0 0 0 0    rgb(185 28 28 / 0); }
+}
+
+/* --- TaskCard: urgent heartbeat ----------------------------------------
+   Single beat, slower tempo, 9px reach — deliberately weaker than
+   pulse-red so overdue always out-pulses due-soon in a mixed list. */
+@keyframes pulse-ember {
+  0%   { box-shadow: 0 10px 30px -20px rgb(154 52 18 / 0.38), 0 1px 2px rgb(37 37 37 / 0.05), 0 0 0 0   rgb(212 69 28 / 0.4); }
+  30%  { box-shadow: 0 12px 32px -20px rgb(154 52 18 / 0.44), 0 1px 2px rgb(37 37 37 / 0.05), 0 0 0 9px rgb(212 69 28 / 0); }
+  100% { box-shadow: 0 10px 30px -20px rgb(154 52 18 / 0.38), 0 1px 2px rgb(37 37 37 / 0.05), 0 0 0 0   rgb(212 69 28 / 0); }
+}
+
+/* --- TaskCard: banner glyph beat ---------------------------------------
+   Gives the heartbeat a focal point. Runs on the SAME duration as its
+   card's pulse so the two stay locked; transform only. */
+@keyframes glyph-beat {
+  0%, 100% { transform: scale(1);    opacity: 0.92; }
+  24%      { transform: scale(1.22); opacity: 1; }
+  48%      { transform: scale(1);    opacity: 0.92; }
+}
+
+.animate-pulse-red   { animation: pulse-red   1.8s ease-out infinite; }
+.animate-pulse-ember { animation: pulse-ember 2.4s ease-out infinite; }
+.animate-glyph-beat  { animation: glyph-beat  1.8s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-red,
+  .animate-pulse-ember,
+  .animate-glyph-beat { animation: none; }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ListChecks, X } from 'lucide-react'
 import { TaskCard, SubtaskStackCard } from '@/components/TaskCard'
 import { OverdueGateModal, collectOverdueItems } from '@/components/OverdueGateModal'
@@ -25,15 +25,23 @@ const FILTER_OPTIONS = [
   { value: 'nodate', label: 'No deadline' },
 ]
 
-function applyFilter(tasks, filterMode) {
+// Shared by both a task's own date and a promoted subtask entry's date
+// (see `sortEntries` below) — "Overdue"/"No deadline" mean the same
+// thing for either kind of item, so both are judged by this one rule
+// rather than the filter only ever looking at a task's own date.
+function dateMatchesFilter(dateDeadline, filterMode) {
   if (filterMode === 'overdue') {
-    const now = Date.now()
-    return tasks.filter((t) => t.dateDeadline && new Date(t.dateDeadline).getTime() < now)
+    return Boolean(dateDeadline) && new Date(dateDeadline).getTime() < Date.now()
   }
   if (filterMode === 'nodate') {
-    return tasks.filter((t) => !t.dateDeadline)
+    return !dateDeadline
   }
-  return tasks
+  return true
+}
+
+function applyFilter(tasks, filterMode) {
+  if (filterMode === 'all') return tasks
+  return tasks.filter((t) => dateMatchesFilter(t.dateDeadline, filterMode))
 }
 
 function sortTasksFlat(tasks, sortMode) {
@@ -66,6 +74,7 @@ const CELEBRATION_MS = 1300
 const SUBTASK_CELEBRATION_MS = 1400
 
 export function TaskList() {
+  const navigate = useNavigate()
   // Sourced from the shared store (loaded once, at the authenticated
   // layout level) rather than an independent fetch of its own — this
   // is the same store AddTaskFab and the other task pages read and
@@ -276,15 +285,23 @@ export function TaskList() {
     }
   }
 
-  // Where a promoted subtask's "Part of ..." tag sends you — not a
-  // navigation, just scrolls the full task's own card into view and
-  // gives it a brief highlight so it's obvious which one it meant.
-  // Direct DOM manipulation rather than React state, same call as the
+  // Where a promoted subtask's "Part of ..." tag sends you — normally
+  // not a navigation, just scrolls the full task's own card into view
+  // and gives it a brief highlight so it's obvious which one it meant
+  // (direct DOM manipulation rather than React state, same call as the
   // task detail page's FLIP reorder animation: a purely transient
-  // visual effect that doesn't need to survive a re-render.
+  // visual effect that doesn't need to survive a re-render). Now that a
+  // filter can promote a subtask onto the page without its parent task
+  // also matching (see `subtaskEntries` above), the task's own card
+  // might genuinely not be rendered here at all — falls back to a real
+  // navigation to the task's own detail page in that case, rather than
+  // silently doing nothing.
   function handleJumpToTask(taskId) {
     const el = document.getElementById(`task-${taskId}`)
-    if (!el) return
+    if (!el) {
+      navigate(`/tasks/${taskId}`)
+      return
+    }
     el.scrollIntoView({ behavior: 'smooth', block: 'center' })
     el.classList.add('ring-2', 'ring-sky-400')
     window.setTimeout(() => el.classList.remove('ring-2', 'ring-sky-400'), 1200)
@@ -362,19 +379,28 @@ export function TaskList() {
   // bundled in its own task's normal cascade preview lower down.
   // Undated subtasks never get promoted this way; they stay bundled in
   // the task's normal preview only.
-  const sortEntries = filteredActiveTasks.flatMap((task) => {
-    const entries = [{ type: 'task', task, date: task.dateDeadline }]
+  //
+  // Task entries and subtask entries are filtered independently rather
+  // than subtask entries only ever existing under an already-filtered
+  // task — a subtask can be overdue while its own parent task isn't (or
+  // vice versa), and the filter is meant to judge each entry on its own
+  // date, not inherit its parent's. Built from every active task
+  // (`activeTasks`, not `filteredActiveTasks`) so an overdue subtask
+  // still surfaces under the "Overdue" filter even when its task doesn't
+  // itself match.
+  const taskEntries = filteredActiveTasks.map((task) => ({ type: 'task', task, date: task.dateDeadline }))
+  const subtaskEntries = activeTasks.flatMap((task) => {
     // A subtask mid-celebration stays promoted too — without this it'd
     // vanish from its standalone spot the instant the check succeeds,
     // never actually playing the cross-out it's meant to.
     const datedIncompleteSubtasks = task.subtasks.filter(
       (s) => (!s.completed || celebratingSubtaskIds.has(s.id)) && s.dateDeadline
     )
-    for (const subtask of datedIncompleteSubtasks) {
-      entries.push({ type: 'subtask', task, subtask, date: subtask.dateDeadline })
-    }
-    return entries
+    return datedIncompleteSubtasks
+      .filter((s) => dateMatchesFilter(s.dateDeadline, filterMode))
+      .map((subtask) => ({ type: 'subtask', task, subtask, date: subtask.dateDeadline }))
   })
+  const sortEntries = [...taskEntries, ...subtaskEntries]
 
   // Three buckets: due this week (includes overdue — an overdue date
   // is even sooner than "within a week"), no deadline, then later.
@@ -560,7 +586,7 @@ export function TaskList() {
           )}
 
           {sortMode === 'due' ? (
-            filteredActiveTasks.length === 0 ? (
+            sortEntries.length === 0 ? (
               <p className="text-sm text-muted-foreground">No tasks match this filter.</p>
             ) : (
               <>
@@ -577,7 +603,7 @@ export function TaskList() {
             </div>
           )}
 
-          {completedTasks.length > 0 && (
+          {filterMode === 'all' && completedTasks.length > 0 && (
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-muted-foreground">
