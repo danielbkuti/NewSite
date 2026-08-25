@@ -16,6 +16,7 @@ import { ProgressPage } from '@/components/ProgressPage'
 import { ComingSoonPage } from '@/components/ComingSoonPage'
 import { Footer } from '@/components/Footer'
 import { AddTaskFab } from '@/components/AddTaskFab'
+import { TaskStoreProvider } from '@/context/TaskStoreContext'
 import { checkAuth, logout } from '@/lib/auth'
 
 // Wraps every public route (landing, login, signup, verify) so the
@@ -55,17 +56,23 @@ function AuthLayout({ children }) {
 // them, same pattern as PublicLayout above.
 function AuthenticatedLayout({ firstName, onLogout }) {
   return (
-    <div className="min-h-screen bg-background">
-      <NavBar firstName={firstName} onLogout={onLogout} />
-      {/* NavBar is fixed, and taller on narrow screens (it grows a second
-          link row below md) — pt-28 clears that worst case, pt-16 clears
-          the single-row desktop height (h-16) from md up. */}
-      <div className="pt-28 md:pt-16">
-        <Outlet />
-        <Footer />
+    // TaskStoreProvider lives here, one level above every authenticated
+    // page and the FAB — a single shared fetch of the task list that
+    // Dashboard/TaskList/TaskDetailPage/AddTaskFab all read and write
+    // through, instead of each independently fetching its own copy.
+    <TaskStoreProvider>
+      <div className="min-h-screen bg-background">
+        <NavBar firstName={firstName} onLogout={onLogout} />
+        {/* NavBar is fixed, and taller on narrow screens (it grows a second
+            link row below md) — pt-28 clears that worst case, pt-16 clears
+            the single-row desktop height (h-16) from md up. */}
+        <div className="pt-28 md:pt-16">
+          <Outlet />
+          <Footer />
+        </div>
+        <AddTaskFab />
       </div>
-      <AddTaskFab />
-    </div>
+    </TaskStoreProvider>
   )
 }
 

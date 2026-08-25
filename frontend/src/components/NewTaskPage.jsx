@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DeadlineEditor } from '@/components/DeadlineEditor'
 import { createTask } from '@/lib/tasks'
+import { useTaskStore } from '@/context/TaskStoreContext'
 import { formatDeadline } from '@/lib/utils'
 
 // The dedicated task-creation page — previously "adding a task" only
@@ -12,6 +13,7 @@ import { formatDeadline } from '@/lib/utils'
 // in the add menu, from every context that offers it.
 export function NewTaskPage() {
   const navigate = useNavigate()
+  const { mergeTask } = useTaskStore()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [dateDeadline, setDateDeadline] = useState(null)
@@ -39,6 +41,10 @@ export function NewTaskPage() {
         description: description.trim() ? description.trim() : undefined,
         dateDeadline,
       })
+      // Fold the new task into the shared store before navigating —
+      // otherwise the detail page it's about to land on would find
+      // nothing under this id until the store's next full refresh.
+      mergeTask(task)
       navigate(`/tasks/${task.id}`)
     } catch (err) {
       setError(err.data?.name?.[0] ?? err.data?.dateDeadline?.[0] ?? 'Could not create that task.')

@@ -37,7 +37,7 @@ export function collectOverdueItems(tasks) {
 // needing to reach into any of those components; the fixed, full-
 // viewport overlay is what blocks interaction, since every click lands
 // on it rather than passing through to the page underneath.
-export function OverdueGateModal({ overdueItems, onDismiss }) {
+export function OverdueGateModal({ overdueItems, onDismiss, onReview }) {
   const visible = overdueItems.slice(0, 3)
   const hiddenCount = overdueItems.length - visible.length
 
@@ -89,7 +89,7 @@ export function OverdueGateModal({ overdueItems, onDismiss }) {
         )}
 
         <div className="mt-6 flex justify-center">
-          <HoverFillButton onClick={onDismiss}>Review</HoverFillButton>
+          <HoverFillButton onClick={onReview ?? onDismiss}>Review</HoverFillButton>
         </div>
       </div>
     </div>

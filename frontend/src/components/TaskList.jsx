@@ -1,16 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ListChecks, X } from 'lucide-react'
 import { TaskCard, SubtaskStackCard } from '@/components/TaskCard'
 import { OverdueGateModal, collectOverdueItems } from '@/components/OverdueGateModal'
-import {
-  fetchTasks,
-  fetchTask,
-  updateTask,
-  deleteTask,
-  createSubTask,
-  updateSubTask,
-  deleteSubTask,
-} from '@/lib/tasks'
+import { Button } from '@/components/ui/button'
+import { updateTask, deleteTask, createSubTask, updateSubTask, deleteSubTask } from '@/lib/tasks'
+import { useTaskStore } from '@/context/TaskStoreContext'
 import { cn, UPCOMING_WINDOW_MS } from '@/lib/utils'
 
 // "Due date" is the only sort with buckets and promoted subtasks —
@@ -62,9 +57,12 @@ const COMPLETED_PREVIEW_COUNT = 3
 const CELEBRATION_MS = 1300
 
 export function TaskList() {
-  // 'loading' | 'ready' | 'error'
-  const [status, setStatus] = useState('loading')
-  const [tasks, setTasks] = useState([])
+  // Sourced from the shared store (loaded once, at the authenticated
+  // layout level) rather than an independent fetch of its own — this
+  // is the same store AddTaskFab and the other task pages read and
+  // write through, so a mutation from any of them shows up here too
+  // without needing a reload.
+  const { tasks, status, setTasks, refreshTasks, refreshTask: refreshTaskInStore } = useTaskStore()
   // Task ids currently mid-celebration — kept in the active section
   // (regardless of their actual completed state) until their timer
   // clears, so completing a task doesn't just instantly teleport it to
@@ -79,14 +77,13 @@ export function TaskList() {
   const [sortMode, setSortMode] = useState('due')
   const [filterMode, setFilterMode] = useState('all')
 
-  useEffect(() => {
-    fetchTasks()
-      .then((data) => {
-        setTasks(data.results)
-        setStatus('ready')
-      })
-      .catch(() => setStatus('error'))
-  }, [])
+  // Bulk select: off by default, and a plain id Set rather than
+  // anything fancier — "is this id selected" is the only question
+  // anything here ever asks of it.
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false)
 
   useEffect(() => {
     if (status !== 'ready' || overdueCheckedRef.current) return
@@ -162,14 +159,13 @@ export function TaskList() {
     }
   }
 
-  // Re-fetches one task and replaces it in local state — used after any
-  // subtask mutation. Completing/adding a subtask can flip the parent
-  // task's own `completed` field server-side (Task.update_completion_status),
-  // so pulling the authoritative task back down is simpler and safer
-  // than re-deriving that logic here.
+  // Re-fetches one task and folds it back into the shared store — used
+  // after any subtask mutation. Completing/adding a subtask can flip
+  // the parent task's own `completed` field server-side
+  // (Task.update_completion_status), so pulling the authoritative task
+  // back down is simpler and safer than re-deriving that logic here.
   async function refreshTask(taskId) {
-    const fresh = await fetchTask(taskId)
-    setTasks((current) => current.map((t) => (t.id === taskId ? fresh : t)))
+    await refreshTaskInStore(taskId)
   }
 
   async function handleAddSubtask(task, name) {
@@ -193,6 +189,58 @@ export function TaskList() {
   async function handleDeleteSubtask(task, subtask) {
     await deleteSubTask(subtask.id)
     await refreshTask(task.id)
+  }
+
+  // Bulk select: toggling one id, selecting everything currently
+  // visible, or dropping the selection entirely (also what turning
+  // select mode off does, so re-entering it never starts pre-selected).
+  function toggleSelected(taskId) {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(taskId)) next.delete(taskId)
+      else next.add(taskId)
+      return next
+    })
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false)
+    setSelectedIds(new Set())
+    setConfirmingBulkDelete(false)
+  }
+
+  // Only tasks not already completed and with no incomplete subtask of
+  // their own are eligible — the same completion gate TaskCard's own
+  // Pending/Complete button enforces for this list (see the module note
+  // on completion being gated here, not on the detail page). Selecting
+  // an ineligible task is still allowed (it's still fair game for bulk
+  // delete); bulk-complete just quietly skips it.
+  function isEligibleForBulkComplete(task) {
+    return !task.completed && !task.subtasks.some((s) => !s.completed)
+  }
+
+  async function handleBulkComplete() {
+    const eligible = tasks.filter((t) => selectedIds.has(t.id) && isEligibleForBulkComplete(t))
+    if (eligible.length === 0) return
+    setBulkBusy(true)
+    try {
+      await Promise.all(eligible.map((t) => updateTask(t.id, { completed: true })))
+      await refreshTasks()
+    } finally {
+      setBulkBusy(false)
+      exitSelectMode()
+    }
+  }
+
+  async function handleBulkDeleteConfirm() {
+    setBulkBusy(true)
+    try {
+      await Promise.all([...selectedIds].map((id) => deleteTask(id)))
+      await refreshTasks()
+    } finally {
+      setBulkBusy(false)
+      exitSelectMode()
+    }
   }
 
   // Where a promoted subtask's "Part of ..." tag sends you — not a
@@ -232,6 +280,23 @@ export function TaskList() {
     .sort((a, b) => new Date(b.dateCompleted) - new Date(a.dateCompleted))
   const visibleCompletedTasks = completedTasks.slice(0, COMPLETED_PREVIEW_COUNT)
   const hiddenCompletedCount = completedTasks.length - visibleCompletedTasks.length
+  // Everything selectable by "Select all" — every task actually
+  // rendered right now, active or completed, under whatever filter's
+  // currently applied. Not the promoted-subtask entries the due-date
+  // sort adds — bulk select only ever operates on whole tasks.
+  const selectableIds = [...filteredActiveTasks, ...visibleCompletedTasks].map((t) => t.id)
+  const selectedCount = selectedIds.size
+  const eligibleSelectedCount = tasks.filter(
+    (t) => selectedIds.has(t.id) && isEligibleForBulkComplete(t)
+  ).length
+
+  function selectAll() {
+    setSelectedIds(new Set(selectableIds))
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set())
+  }
 
   function renderCard(task) {
     return (
@@ -247,6 +312,9 @@ export function TaskList() {
         onSetSubtaskDeadline={handleSetSubtaskDeadline}
         onDeleteSubtask={handleDeleteSubtask}
         pulseReady={!showOverdueGate}
+        selectMode={selectMode}
+        selected={selectedIds.has(task.id)}
+        onSelectToggle={() => toggleSelected(task.id)}
       />
     )
   }
@@ -319,6 +387,10 @@ export function TaskList() {
         <OverdueGateModal
           overdueItems={collectOverdueItems(tasks)}
           onDismiss={() => setShowOverdueGate(false)}
+          onReview={() => {
+            setFilterMode('overdue')
+            setShowOverdueGate(false)
+          }}
         />
       )}
 
@@ -346,21 +418,106 @@ export function TaskList() {
                 </button>
               ))}
             </div>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              Sort by
-              <select
-                value={sortMode}
-                onChange={(e) => setSortMode(e.target.value)}
-                className="rounded-md border bg-background px-2 py-1 text-xs text-foreground outline-none focus-visible:border-ring"
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                Sort by
+                <select
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value)}
+                  className="rounded-md border bg-background px-2 py-1 text-xs text-foreground outline-none focus-visible:border-ring"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                type="button"
+                size="sm"
+                variant={selectMode ? 'secondary' : 'outline'}
+                onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
               >
-                {SORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {selectMode ? (
+                  <>
+                    <X /> Cancel
+                  </>
+                ) : (
+                  <>
+                    <ListChecks /> Select
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
+
+          {/* Bulk action bar — only up while select mode is on. Selection
+              survives a filter/sort change (it's just an id Set), so
+              switching views mid-selection doesn't lose it. */}
+          {selectMode && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2">
+              <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-muted-foreground">
+                <span>{selectedCount} selected</span>
+                <button type="button" onClick={selectAll} className="hover:text-foreground hover:underline">
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  disabled={selectedCount === 0}
+                  className="hover:text-foreground hover:underline disabled:pointer-events-none disabled:opacity-50"
+                >
+                  Clear
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {confirmingBulkDelete ? (
+                  <>
+                    <span className="text-xs text-muted-foreground">
+                      Delete {selectedCount} task{selectedCount === 1 ? '' : 's'}?
+                    </span>
+                    <Button size="sm" variant="destructive" onClick={handleBulkDeleteConfirm} disabled={bulkBusy}>
+                      {bulkBusy ? 'Deleting…' : 'Confirm'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setConfirmingBulkDelete(false)}
+                      disabled={bulkBusy}
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={handleBulkComplete}
+                      disabled={bulkBusy || eligibleSelectedCount === 0}
+                      title={
+                        selectedCount > 0 && eligibleSelectedCount === 0
+                          ? 'None of the selected tasks can be completed yet — clear their subtasks first.'
+                          : undefined
+                      }
+                    >
+                      {bulkBusy ? 'Working…' : `Complete${eligibleSelectedCount > 0 ? ` (${eligibleSelectedCount})` : ''}`}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setConfirmingBulkDelete(true)}
+                      disabled={bulkBusy || selectedCount === 0}
+                    >
+                      Delete
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {sortMode === 'due' ? (
             filteredActiveTasks.length === 0 ? (

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, X, SquarePlus, Target, CalendarDays, ListPlus, CalendarClock, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AddSubtaskForm } from '@/components/AddSubtaskForm'
 import { DeadlineEditor } from '@/components/DeadlineEditor'
-import { fetchTask, createSubTask, updateTask } from '@/lib/tasks'
+import { createSubTask, updateTask } from '@/lib/tasks'
+import { useTaskStore } from '@/context/TaskStoreContext'
 import { cn } from '@/lib/utils'
 
 const GRADIENT = 'bg-gradient-to-br from-[#e0c3fc] via-[#7c5fb0] to-[#8ec5fc]'
@@ -87,44 +88,42 @@ export function AddTaskFab() {
   const [open, setOpen] = useState(false)
   // null (option stack) | 'subtask' | 'deadline' | 'description'
   const [activeAction, setActiveAction] = useState(null)
-  const [currentTask, setCurrentTask] = useState(null)
   const [descriptionDraft, setDescriptionDraft] = useState('')
+  const [descriptionDraftDirty, setDescriptionDraftDirty] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const navigate = useNavigate()
   const location = useLocation()
+  const { tasks, refreshTask } = useTaskStore()
 
   const detailMatch = location.pathname.match(TASK_DETAIL_PATH)
   const taskId = detailMatch ? detailMatch[1] : null
-
-  // Pulls the current task's data (for the deadline/description
-  // prefill) once, whenever the menu opens on a detail page — not on
-  // every render, since it's only needed while the menu's actually up.
-  useEffect(() => {
-    if (!open || !taskId) return
-    fetchTask(taskId)
-      .then((data) => {
-        setCurrentTask(data)
-        setDescriptionDraft(data.description ?? '')
-      })
-      .catch(() => setCurrentTask(null))
-  }, [open, taskId])
+  // Read straight from the shared store instead of this component
+  // fetching its own independent copy — TaskDetailPage is showing this
+  // same task (that's the only way `taskId` is set at all), so the
+  // store already has it loaded.
+  const currentTask = taskId ? (tasks.find((t) => t.id === Number(taskId)) ?? null) : null
+  // The textarea needs its own draft state (it's edited before saving),
+  // seeded from the task the first time the description action opens
+  // for it — not resynced on every store update after that, or typing
+  // would get clobbered by a stray re-render.
+  const descriptionValue = descriptionDraftDirty ? descriptionDraft : (currentTask?.description ?? '')
 
   function closeMenu() {
     setOpen(false)
     setActiveAction(null)
     setError(null)
+    setDescriptionDraftDirty(false)
   }
 
-  // Every detail-page action mutates the task this FAB has no shared
-  // state with — TaskDetailPage owns its own fetch entirely
-  // independently (see its own comments on this same tradeoff). A
-  // full reload is the same known-rough-edge fix already used
-  // elsewhere in this component until tasks have a shared store.
-  function closeAndRefresh() {
+  // Mutates through the same shared store TaskDetailPage reads from —
+  // re-fetching just this one task and folding it back in is enough to
+  // make the change show up there immediately, no reload needed.
+  async function closeAndRefresh() {
     setOpen(false)
     setActiveAction(null)
-    window.location.reload()
+    setDescriptionDraftDirty(false)
+    await refreshTask(taskId)
   }
 
   function goTo(path) {
@@ -134,12 +133,12 @@ export function AddTaskFab() {
 
   async function handleAddSubtask(name) {
     await createSubTask({ task: taskId, name })
-    closeAndRefresh()
+    await closeAndRefresh()
   }
 
   async function handleSaveDeadline(dateDeadline) {
     await updateTask(taskId, { dateDeadline })
-    closeAndRefresh()
+    await closeAndRefresh()
   }
 
   async function handleSaveDescription(event) {
@@ -147,8 +146,8 @@ export function AddTaskFab() {
     setError(null)
     setSubmitting(true)
     try {
-      await updateTask(taskId, { description: descriptionDraft })
-      closeAndRefresh()
+      await updateTask(taskId, { description: descriptionValue })
+      await closeAndRefresh()
     } catch (err) {
       setError(err.data?.description?.[0] ?? 'Could not save that description.')
       setSubmitting(false)
@@ -273,8 +272,11 @@ export function AddTaskFab() {
                   </button>
                 </div>
                 <textarea
-                  value={descriptionDraft}
-                  onChange={(e) => setDescriptionDraft(e.target.value)}
+                  value={descriptionValue}
+                  onChange={(e) => {
+                    setDescriptionDraft(e.target.value)
+                    setDescriptionDraftDirty(true)
+                  }}
                   rows={4}
                   autoFocus
                   placeholder="What's this task about?"
@@ -282,7 +284,16 @@ export function AddTaskFab() {
                 />
                 {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
                 <div className="mt-3 flex justify-end gap-2">
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setActiveAction(null)} disabled={submitting}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setActiveAction(null)
+                      setDescriptionDraftDirty(false)
+                    }}
+                    disabled={submitting}
+                  >
                     Cancel
                   </Button>
                   <Button type="submit" size="sm" disabled={submitting}>

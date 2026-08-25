@@ -18,11 +18,11 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import RedirectView
 
-from pages.views import frontend_view
+from pages.views import api_root_view
 
 urlpatterns = [
 
-    path('', frontend_view, name='home'),
+    path('', api_root_view, name='home'),
     path('admin/', admin.site.urls),
     path('tasks/', include('tasks.urls')),
 
