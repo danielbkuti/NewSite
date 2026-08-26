@@ -223,6 +223,7 @@ export function TaskDetailPage() {
   const [editingDeadline, openDeadlineEditor, closeDeadlineEditor] = useExclusiveDeadlineEditor()
   const [addingSubtask, setAddingSubtask] = useState(false)
   const deadlineSectionRef = useRef(null)
+  const deadlineAnchorRef = useRef(null)
   const subtaskSectionRef = useRef(null)
   // Safe to call unconditionally with an as-yet-null task (dateDeadline
   // undefined just means "no deadline", same as the loaded case) —
@@ -338,6 +339,15 @@ export function TaskDetailPage() {
 
   async function handleDeleteSubtask(subtask) {
     await deleteSubTask(subtask.id)
+    await refreshTask(id)
+  }
+
+  // Same shape as handleRenameSubtask — this page (and the app as a
+  // whole, per HANDOFF.md's Known gaps) had no way to set a subtask's
+  // deadline once it already existed without one, only at creation
+  // time via AddSubtaskForm.
+  async function handleSetSubtaskDeadline(subtask, dateDeadline) {
+    await updateSubTask(subtask.id, { dateDeadline })
     await refreshTask(id)
   }
 
@@ -650,15 +660,20 @@ export function TaskDetailPage() {
                   </div>
                 </div>
               ) : (
-                <div className="relative">
+                <div ref={deadlineAnchorRef} className="relative">
                   <p className="text-[10px] font-black tracking-[.12em] uppercase" style={{ color: theme.strong }}>
                     Deadline
                   </p>
-                  {editingDeadline ? (
-                    <div className="relative mt-1">
-                      <DeadlineEditor value={task.dateDeadline} onSave={handleDeadlineSave} onCancel={closeDeadlineEditor} minDayOffset={0} />
-                    </div>
-                  ) : (
+                  {editingDeadline && (
+                    <DeadlineEditor
+                      anchorRef={deadlineAnchorRef}
+                      value={task.dateDeadline}
+                      onSave={handleDeadlineSave}
+                      onCancel={closeDeadlineEditor}
+                      minDayOffset={0}
+                    />
+                  )}
+                  {!editingDeadline && (
                     <button
                       type="button"
                       onClick={openAddDeadlineEditor}
@@ -835,6 +850,8 @@ export function TaskDetailPage() {
         </div>
       </div>
 
+      <ActivityLog entries={task.activityLog} />
+
       {deadlineHintMounted && (
         <div
           className={cn(
@@ -855,11 +872,44 @@ export function TaskDetailPage() {
 // badge. Completing here is never blocked (unlike TaskCard's own
 // button) — it cascades any still-open subtasks — so there's no
 // disabled state to design for, just complete <-> undo.
+//
+// Same hover-fill-bar preview mechanic as the list's own
+// PendingCompleteButton (TaskCard.jsx): hovering for HOVER_FILL_MS
+// sweeps a highlight across the pill and flips the label, previewing
+// what a click would do, before the click itself — a click is always
+// live immediately regardless of hover progress, this is purely a
+// preview. Adapted rather than reused outright since this pill is
+// already the state's full `cta` gradient at rest (the card's version
+// fills *into* colour from a muted `bg-secondary`) — here the sweep is
+// a light overlay instead, and it fills from the left when marking
+// complete, from the right when undoing, mirroring the card's two
+// directions.
+const HOVER_FILL_MS = 350
+
 function PrimaryActionButton({ task, theme, onClick }) {
   const [pending, setPending] = useState(false)
-  const [hovering, setHovering] = useState(false)
+  const [hoverPreview, setHoverPreview] = useState(false)
+  const timerRef = useRef(null)
+
+  function handleMouseEnter() {
+    timerRef.current = setTimeout(() => setHoverPreview(true), HOVER_FILL_MS)
+  }
+
+  function handleMouseLeave() {
+    clearTimeout(timerRef.current)
+    setHoverPreview(false)
+  }
+
+  useEffect(() => () => clearTimeout(timerRef.current), [])
 
   async function handleClick() {
+    // Same reasoning as PendingCompleteButton's own click handler:
+    // reset the preview immediately rather than leaving it showing
+    // through the async completion round-trip, so the real new state
+    // (task.completed flips once the request lands) doesn't collide
+    // with a stale hover preview a moment later.
+    clearTimeout(timerRef.current)
+    setHoverPreview(false)
     setPending(true)
     try {
       await onClick()
@@ -868,19 +918,27 @@ function PrimaryActionButton({ task, theme, onClick }) {
     }
   }
 
-  const label = task.completed ? (hovering ? 'Undo' : 'Completed') : 'Mark complete'
+  const label = task.completed ? (hoverPreview ? 'Undo' : 'Completed') : hoverPreview ? 'Complete' : 'Mark complete'
 
   return (
     <button
       type="button"
       onClick={handleClick}
       disabled={pending}
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
-      className="w-full rounded-full border-none px-[18px] py-[11px] text-[13.5px] font-black text-white transition-[filter] duration-150 hover:brightness-[1.06] disabled:opacity-70"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className="group relative w-full overflow-hidden rounded-full border-none px-[18px] py-[11px] text-[13.5px] font-black text-white disabled:opacity-70"
       style={{ background: theme.cta, boxShadow: theme.ctaShadow }}
     >
-      {pending ? 'Saving…' : label}
+      <span
+        aria-hidden="true"
+        className={cn(
+          'absolute inset-0 scale-x-0 bg-white/25 transition-transform ease-linear group-hover:scale-x-100',
+          task.completed ? 'origin-right' : 'origin-left'
+        )}
+        style={{ transitionDuration: `${HOVER_FILL_MS}ms` }}
+      />
+      <span className="relative">{pending ? 'Saving…' : label}</span>
     </button>
   )
 }
@@ -1136,7 +1194,7 @@ function DescriptionPanel({ description, onSave, border, strong }) {
 // Completed rows stay emerald in every page state — green is the
 // completion signal at row level; if it took the page hue you'd lose
 // the ability to see which rows are done on an overdue page.
-function DetailSubtaskRow({ index, subtask, checked, confetti, busy, theme, onToggle, onRename, onDelete }) {
+function DetailSubtaskRow({ index, subtask, checked, confetti, busy, theme, onToggle, onRename, onDelete, onSetDeadline }) {
   const status = useDeadlineStatus(subtask.dateDeadline, checked, { liveOverdue: true })
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -1144,6 +1202,13 @@ function DetailSubtaskRow({ index, subtask, checked, confetti, busy, theme, onTo
   const [draft, setDraft] = useState(subtask.name)
   const [renameError, setRenameError] = useState(null)
   const deleteRef = useRef(null)
+  // Was previously nowhere on this page — a subtask with no deadline
+  // yet had no "set one" control at all here (see HANDOFF.md's Known
+  // gaps), only ever settable from the add-subtask form at creation
+  // time. Same exclusive-popover coordination every other deadline
+  // trigger in the app uses.
+  const [editingDeadline, openDeadlineEditor, closeDeadlineEditor] = useExclusiveDeadlineEditor()
+  const deadlineAnchorRef = useRef(null)
 
   useEffect(() => {
     if (!renaming) setDraft(subtask.name)
@@ -1186,6 +1251,11 @@ function DetailSubtaskRow({ index, subtask, checked, confetti, busy, theme, onTo
     }
   }
 
+  async function handleDeadlineSave(dateDeadline) {
+    await onSetDeadline(dateDeadline)
+    closeDeadlineEditor()
+  }
+
   const indexColor = checked ? '#047857' : theme.strong
   const rowBg = checked ? 'bg-[rgba(240,253,246,0.75)] hover:bg-[rgba(240,253,246,0.9)]' : 'bg-transparent hover:bg-white/80'
 
@@ -1216,6 +1286,23 @@ function DetailSubtaskRow({ index, subtask, checked, confetti, busy, theme, onTo
         </span>
       )
     }
+  } else {
+    // No deadline yet, same amber pill every other "set a deadline"
+    // trigger in the app already uses (AddSubtaskForm's own included).
+    badge = (
+      <div ref={deadlineAnchorRef} className="relative shrink-0">
+        <button
+          type="button"
+          onClick={() => (editingDeadline ? closeDeadlineEditor() : openDeadlineEditor())}
+          className="rounded-full bg-[#fffbeb] px-2 py-0.5 text-[11px] font-black text-[#b45309] transition-colors hover:bg-[#fef3c7]"
+        >
+          Set deadline
+        </button>
+        {editingDeadline && (
+          <DeadlineEditor anchorRef={deadlineAnchorRef} value={null} onSave={handleDeadlineSave} onCancel={closeDeadlineEditor} />
+        )}
+      </div>
+    )
   }
 
   return (
@@ -1419,6 +1506,33 @@ function SubtaskFlipList({ subtasks, children }) {
           {children(subtask, index)}
         </div>
       ))}
+    </div>
+  )
+}
+
+// A plain, oldest-first log of every committed change to this task and
+// its subtasks — created, renamed, completed/reopened, deadline set/
+// changed/cleared, subtask added/removed. Sits below the page shell
+// (not part of the card itself, per the request that introduced this).
+// Deliberately undesigned for now: no icons, no grouping, no
+// state-theme colours — just a vertical list of "{message} — {date}"
+// lines. `entries` comes straight off `task.activityLog`, populated
+// entirely server-side (see backend/tasks/models.py's
+// _log_task_changes/_log_subtask_changes) — nothing here computes or
+// guesses at what changed.
+function ActivityLog({ entries }) {
+  if (!entries || entries.length === 0) return null
+
+  return (
+    <div className="mt-6">
+      <h2 className="text-xs font-bold tracking-wide text-muted-foreground uppercase">Activity log</h2>
+      <div className="mt-2 flex flex-col gap-1.5">
+        {entries.map((entry) => (
+          <p key={entry.id} className="text-sm text-muted-foreground">
+            {entry.message} <span className="text-xs">— {formatDeadline(entry.dateCreated)}</span>
+          </p>
+        ))}
+      </div>
     </div>
   )
 }

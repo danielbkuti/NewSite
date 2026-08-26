@@ -1,7 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { WheelPicker } from '@/components/ui/wheel-picker'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
+
+// How far the popover keeps itself from the viewport's own edges, and
+// the gap it leaves between itself and whatever it's anchored to.
+const EDGE_GAP = 8
 
 const DAY_MS = 24 * 60 * 60 * 1000
 // Wheel range: 90 days back (room to backdate/correct) to a year
@@ -56,9 +61,25 @@ const PERIOD_ITEMS = [
 // unchecked, the deadline lands on the selected date at local
 // midnight (same convention date-only deadlines already used before
 // time-of-day support existed); checked, three more wheels pick the
-// time. Always renders as a self-contained floating popover, since
-// every call site opens it the same way: a trigger badge toggles it
-// into view without disturbing the rest of the layout underneath.
+// time.
+//
+// Renders through a portal into `document.body`, positioned with real
+// `position: fixed` screen coordinates measured off `anchorRef` (the
+// trigger every call site wraps this in), rather than as a normal DOM
+// descendant positioned with `absolute`. That used to mean this
+// popover's visibility depended on every ancestor between it and its
+// trigger never establishing a CSS stacking context of its own (any
+// `transform`/`opacity` on one did, silently trapping the popover's
+// z-index below it) — a whole recurring class of "popover paints in
+// the wrong place" bugs that kept resurfacing in different ancestors.
+// A portal has no ancestors to trap it in the first place. It also
+// means "is there room to open downward" can be answered honestly:
+// the old absolute-positioned version only ever checked raw viewport
+// pixels, which on a scrolling list of cards are almost never actually
+// empty — they're the next card. This version still measures the same
+// way, but a real dimming backdrop (below) means even a popover that
+// ends up overlapping a neighboring card now reads as an intentional
+// floating panel instead of a layout bug.
 //
 // Six independent wheels rather than one combined date wheel and one
 // combined time wheel: day/month/year, and (when time's on)
@@ -76,7 +97,7 @@ const PERIOD_ITEMS = [
 // Time-of-day isn't similarly bounded (same as before): picking a time
 // earlier than "now" on today's date just surfaces the backend's own
 // validation error, exactly like it always has.
-export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffset = MIN_DAY_OFFSET }) {
+export function DeadlineEditor({ anchorRef, value, onSave, onCancel, className, minDayOffset = MIN_DAY_OFFSET }) {
   const initial = value ? new Date(value) : new Date()
   const initialHasTime = Boolean(value) && (initial.getHours() !== 0 || initial.getMinutes() !== 0)
 
@@ -107,51 +128,56 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
   const [error, setError] = useState(null)
   const [confirmingClear, setConfirmingClear] = useState(false)
 
-  const rootRef = useRef(null)
-  // Whether this popover is flipped to open upward instead of its
-  // default downward — a card far enough down the page otherwise pushes
-  // Save/Cancel below the viewport with no way to scroll to them
-  // (position:absolute doesn't get the browser to auto-scroll for you).
-  // Measured after every layout that can change the popover's own
-  // height (mount, and toggling "Add a time" adds/removes three more
-  // wheels) rather than once — a popover that fit before hasTime was
-  // checked can easily not fit after.
-  const [openUpward, setOpenUpward] = useState(false)
-  // Same idea, horizontally — the default `right-0` (right edge of the
-  // popover lines up with the right edge of its anchor, growing
-  // leftward) is right for a trigger that itself sits near the right
-  // edge of its card, which is most of them. A left-anchored trigger
-  // (the add-subtask form's "Set deadline") on a narrower window can
-  // push the popover's *left* edge past the left edge of the viewport
-  // instead; `alignLeft` flips it to grow rightward from the anchor's
-  // left edge when that's the case.
-  const [alignLeft, setAlignLeft] = useState(false)
+  const popoverRef = useRef(null)
+  // Real viewport coordinates for the portal-rendered popover, in
+  // `position: fixed` terms — null until the first measurement lands,
+  // so the popover can stay invisible for that one frame instead of
+  // flashing at (0, 0). Recomputed on mount, whenever "Add a time"
+  // changes the popover's own height, and on every scroll/resize so it
+  // stays glued to its anchor instead of drifting once the fixed
+  // coordinates go stale.
+  const [coords, setCoords] = useState(null)
 
   useLayoutEffect(() => {
-    const el = rootRef.current
-    // Every caller wraps this in its own `position: relative` anchor
-    // (a trigger button, usually) — that anchor's own position doesn't
-    // move when *this* popover flips between top-full/bottom-full or
-    // left-0/right-0, so measuring off of it (rather than the
-    // popover's own current rect) gives a stable baseline regardless
-    // of which way it's already flipped. The popover's rendered size
-    // is unaffected by which edge it's anchored from, so it's safe to
-    // read directly.
-    const anchor = el?.parentElement
-    if (!el || !anchor) return
-    const anchorRect = anchor.getBoundingClientRect()
-    const popoverRect = el.getBoundingClientRect()
+    function place() {
+      const anchor = anchorRef?.current
+      const popover = popoverRef.current
+      if (!anchor || !popover) return
+      const anchorRect = anchor.getBoundingClientRect()
+      const popoverRect = popover.getBoundingClientRect()
 
-    const spaceBelow = window.innerHeight - anchorRect.top
-    const spaceAbove = anchorRect.top
-    setOpenUpward(popoverRect.height > spaceBelow && spaceAbove > spaceBelow)
+      const spaceBelow = window.innerHeight - anchorRect.bottom
+      const spaceAbove = anchorRect.top
+      const openUpward = popoverRect.height + EDGE_GAP > spaceBelow && spaceAbove > spaceBelow
+      const rawTop = openUpward ? anchorRect.top - popoverRect.height - EDGE_GAP : anchorRect.bottom + EDGE_GAP
+      const top = Math.min(Math.max(EDGE_GAP, rawTop), window.innerHeight - popoverRect.height - EDGE_GAP)
 
-    const rightAlignedLeftEdge = anchorRect.right - popoverRect.width
-    const leftAlignedRightEdge = anchorRect.left + popoverRect.width
-    const rightAlignedOverflowsLeft = rightAlignedLeftEdge < 0
-    const leftAlignedOverflowsRight = leftAlignedRightEdge > window.innerWidth
-    setAlignLeft(rightAlignedOverflowsLeft && !leftAlignedOverflowsRight)
-  }, [hasTime])
+      // Right-align to the anchor's right edge by default (matches most
+      // triggers, which sit near the right edge of their card); fall
+      // back to left-aligning off the anchor's left edge if that would
+      // push the popover past the left edge of the viewport, then clamp
+      // either way so it can never actually run off either side.
+      const rightAligned = anchorRect.right - popoverRect.width
+      const leftAligned = anchorRect.left
+      const left =
+        rightAligned < EDGE_GAP && leftAligned + popoverRect.width <= window.innerWidth - EDGE_GAP
+          ? leftAligned
+          : Math.min(Math.max(EDGE_GAP, rightAligned), window.innerWidth - popoverRect.width - EDGE_GAP)
+
+      setCoords({ top, left })
+    }
+    place()
+    window.addEventListener('resize', place)
+    // Capture phase so a scroll on any nested scrollable ancestor (not
+    // just the window) still triggers a reposition — scroll events
+    // don't bubble, but a capture-phase listener on window still sees
+    // them on the way down.
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [hasTime, anchorRef])
 
   // Closes on Escape — the overlay below handles every other way out.
   useEffect(() => {
@@ -253,11 +279,11 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
     }
   }
 
-  return (
+  return createPortal(
     <>
-      {/* Full-page, invisible click-catcher — closes the popover on any
-          click outside it, *and* stops that click from also reaching
-          whatever it happened to land on underneath (a task card's own
+      {/* Full-page dimming backdrop — closes the popover on any click
+          outside it, *and* stops that click from also reaching whatever
+          it happened to land on underneath (a task card's own
           navigate-on-click, a checkbox). A `document`-level JS listener
           doesn't do that reliably: some interactive elements (this
           app's own custom Checkbox included) toggle off `pointerdown`
@@ -266,31 +292,32 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
           sitting in front of everything else, caught by the browser's
           own hit-testing before the click ever reaches its visual
           target, works regardless of which event any given widget
-          happens to key off of. Sits below the popover itself (z-20 vs
-          z-30) so clicks inside it still land normally. */}
+          happens to key off of.
+          Visibly dimmed (not just an invisible click-catcher) on
+          purpose: this popover is portaled to the very top of the page
+          now, so on a scrolling list it can legitimately end up
+          floating over a neighboring card rather than empty space. The
+          dim is what tells you that's intentional — the rest of the
+          page is inert while this is open — instead of it reading like
+          a rendering bug. */}
       <div
-        className="fixed inset-0 z-20"
+        className="fixed inset-0 z-[60] bg-black/25 backdrop-blur-[1px] transition-opacity"
         onClick={(e) => {
-          // This overlay is a fixed-position element, but it's still a
-          // DOM *descendant* of wherever this editor is mounted (inside
-          // the task card it belongs to) — without this, the click
-          // would keep bubbling right up through the card's own
-          // navigate-on-click after closing the popover, defeating the
-          // whole point.
           e.stopPropagation()
           onCancel()
         }}
         aria-hidden="true"
       />
       <div
-        ref={rootRef}
+        ref={popoverRef}
         onClick={(e) => e.stopPropagation()}
-        className={cn(
-          'absolute z-30 w-64 rounded-lg border bg-card p-3 text-left shadow-lg',
-          openUpward ? 'bottom-full mb-2' : 'top-full mt-2',
-          alignLeft ? 'left-0' : 'right-0',
-          className
-        )}
+        style={{
+          position: 'fixed',
+          top: coords ? `${coords.top}px` : 0,
+          left: coords ? `${coords.left}px` : 0,
+          visibility: coords ? 'visible' : 'hidden',
+        }}
+        className={cn('z-[70] w-64 rounded-lg border bg-card p-3 text-left shadow-lg', className)}
       >
       <p className="text-center text-xs font-medium tabular-nums text-muted-foreground">
         Date: {pad2(day)}/{pad2(month)}/{year}
@@ -379,6 +406,7 @@ export function DeadlineEditor({ value, onSave, onCancel, className, minDayOffse
       </div>
       )}
       </div>
-    </>
+    </>,
+    document.body
   )
 }

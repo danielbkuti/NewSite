@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,7 @@ export function NewTaskPage() {
   const [description, setDescription] = useState('')
   const [dateDeadline, setDateDeadline] = useState(null)
   const [editingDeadline, setEditingDeadline] = useState(false)
+  const deadlineAnchorRef = useRef(null)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -96,7 +97,7 @@ export function NewTaskPage() {
 
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">Deadline (optional)</span>
-          <div className="relative w-fit">
+          <div ref={deadlineAnchorRef} className="relative w-fit">
             <button
               type="button"
               onClick={() => setEditingDeadline(true)}
@@ -106,6 +107,7 @@ export function NewTaskPage() {
             </button>
             {editingDeadline && (
               <DeadlineEditor
+                anchorRef={deadlineAnchorRef}
                 value={dateDeadline}
                 onSave={handlePickDeadline}
                 onCancel={() => setEditingDeadline(false)}
