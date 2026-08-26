@@ -1,6 +1,13 @@
 from rest_framework import serializers
-from ..models import Task, SubTask
+from ..models import Task, SubTask, TaskActivity
 from django.utils import timezone
+
+
+class TaskActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaskActivity
+        fields = ["id", "message", "dateCreated"]
+        read_only_fields = fields
 
 
 class SubTaskSerializer(serializers.ModelSerializer):
@@ -34,6 +41,9 @@ class SubTaskSerializer(serializers.ModelSerializer):
 class TaskSerializer(serializers.ModelSerializer):
     subtasks = SubTaskSerializer(many=True, read_only=True)
     days_since_created = serializers.ReadOnlyField()
+    # Oldest first (see TaskActivity.Meta.ordering) — a log reads
+    # top-to-bottom like a history, not newest-first like a feed.
+    activityLog = TaskActivitySerializer(many=True, read_only=True, source="activity_log")
 
     def validate_dateDeadline(self, value):
         if value and value < timezone.now():
@@ -66,6 +76,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "status",
             "days_since_created",
             "subtasks",
+            "activityLog",
         ]
         # dateCompleted is only ever set by Task.save() reacting to
         # `completed` changing — never client-writable.

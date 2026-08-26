@@ -30,6 +30,74 @@ def _sync_date_completed(instance, model_cls, kwargs):
             kwargs["update_fields"] = list(update_fields) + ["dateCompleted"]
 
 
+def _format_dt(value):
+    """Same rough shape as the frontend's own formatDeadline (month day,
+    year, time) — just not forced to the viewer's own locale, since this
+    runs server-side. Good enough for a log line; not meant to be the
+    single source of truth for date display the way formatDeadline is."""
+    if value is None:
+        return None
+    return value.strftime("%b %d, %Y, %I:%M %p")
+
+
+def _log_task_changes(task, before, created):
+    """
+    Appends a TaskActivity row for task creation, or for any of name /
+    completed / dateDeadline actually changing — called from
+    Task.save() itself (see there) rather than from the API layer, so
+    every write path (the API, the admin, a shell script, the
+    auto-reopen in update_completion_status below) gets logged the same
+    way instead of only the ones a view happens to instrument.
+    `before` is a dict of the previous field values (None on creation).
+    """
+    messages = []
+    if created:
+        messages.append("Task created")
+    else:
+        if before["name"] != task.name:
+            messages.append(f'Task renamed to "{task.name}"')
+        if before["completed"] != task.completed:
+            messages.append("Task marked complete" if task.completed else "Task reopened")
+        if before["dateDeadline"] != task.dateDeadline:
+            if task.dateDeadline is None:
+                messages.append("Task deadline cleared")
+            elif before["dateDeadline"] is None:
+                messages.append(f"Task deadline set to {_format_dt(task.dateDeadline)}")
+            else:
+                messages.append(f"Task deadline changed to {_format_dt(task.dateDeadline)}")
+    for message in messages:
+        TaskActivity.objects.create(task=task, message=message)
+
+
+def _log_subtask_changes(subtask, before, created):
+    """Same idea as _log_task_changes, for a subtask — logged against
+    the *parent* task's activity log (subtasks don't get their own),
+    since that's the log the task detail page actually renders."""
+    messages = []
+    if created:
+        messages.append(f'Subtask "{subtask.name}" added')
+    else:
+        if before["name"] != subtask.name:
+            messages.append(f'Subtask "{before["name"]}" renamed to "{subtask.name}"')
+        if before["completed"] != subtask.completed:
+            messages.append(
+                f'Subtask "{subtask.name}" marked complete'
+                if subtask.completed
+                else f'Subtask "{subtask.name}" reopened'
+            )
+        if before["dateDeadline"] != subtask.dateDeadline:
+            if subtask.dateDeadline is None:
+                messages.append(f'Subtask "{subtask.name}" deadline cleared')
+            elif before["dateDeadline"] is None:
+                messages.append(f'Subtask "{subtask.name}" deadline set to {_format_dt(subtask.dateDeadline)}')
+            else:
+                messages.append(
+                    f'Subtask "{subtask.name}" deadline changed to {_format_dt(subtask.dateDeadline)}'
+                )
+    for message in messages:
+        TaskActivity.objects.create(task=subtask.task, message=message)
+
+
 # Create your models here.
 class Task(models.Model):
     user = models.ForeignKey("user.CustomUser", related_name="tasks", on_delete=models.CASCADE)
@@ -55,9 +123,18 @@ class Task(models.Model):
     )
 
     def save(self, *args, **kwargs):
-        """See _sync_date_completed."""
+        """See _sync_date_completed. Also logs a TaskActivity row for
+        creation and for any tracked field actually changing — see
+        _log_task_changes."""
         _sync_date_completed(self, Task, kwargs)
+        created = self.pk is None
+        before = (
+            None
+            if created
+            else Task.objects.filter(pk=self.pk).values("name", "completed", "dateDeadline").first()
+        )
         super().save(*args, **kwargs)
+        _log_task_changes(self, before, created)
 
     @property
     def days_since_created(self):
@@ -110,6 +187,30 @@ class Task(models.Model):
         ]
 
 
+class TaskActivity(models.Model):
+    """
+    An append-only log of committed changes to a task and its
+    subtasks — created, renamed, completed/reopened, deadline set/
+    changed/cleared, and (for subtasks) removed. Populated entirely
+    from Task.save()/SubTask.save() (_log_task_changes/
+    _log_subtask_changes above) plus SubTaskViewSet.perform_destroy
+    (deletion doesn't go through save()) — never written to directly
+    by a view/serializer, so every write path is covered the same way.
+    Read-only from the API: exposed as a nested list on TaskSerializer.
+    """
+
+    task = models.ForeignKey(Task, related_name="activity_log", on_delete=models.CASCADE)
+    message = models.CharField(max_length=255)
+    dateCreated = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["dateCreated"]
+        verbose_name_plural = "task activity"
+
+    def __str__(self):
+        return self.message
+
+
 class SubTask(models.Model):
     task = models.ForeignKey(Task, related_name="subtasks", on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
@@ -126,12 +227,23 @@ class SubTask(models.Model):
         """
         Keeps dateCompleted in sync (see _sync_date_completed), then
         ensures the parent task's own completion state stays
-        synchronized.
+        synchronized, then logs a TaskActivity row for creation or any
+        tracked field actually changing (see _log_subtask_changes) —
+        deliberately outside the atomic block below so a failure
+        writing the log entry (it never should, but) can't roll back an
+        otherwise-successful save.
         """
         _sync_date_completed(self, SubTask, kwargs)
+        created = self.pk is None
+        before = (
+            None
+            if created
+            else SubTask.objects.filter(pk=self.pk).values("name", "completed", "dateDeadline").first()
+        )
         with transaction.atomic():
             super().save(*args, **kwargs)
             self.task.update_completion_status()
+        _log_subtask_changes(self, before, created)
 
     def __str__(self):
         return f"{self.name} (Subtask of {self.task.name})"
