@@ -351,7 +351,7 @@ export function TaskList() {
   function renderCard(task) {
     return (
       <TaskCard
-        key={task.id}
+        key={`task-${task.id}`}
         task={task}
         celebrating={celebratingIds.has(task.id)}
         onToggleComplete={handleToggle}
