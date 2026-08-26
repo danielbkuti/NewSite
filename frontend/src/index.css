@@ -341,3 +341,65 @@
   .animate-check-pop,
   .animate-flash-emerald { animation: none; }
 }
+
+/* --- TaskDetailPage: gradient border ring for the page shell ------------
+   Same masked-border technique as .task-ring (padding-box/border-box mask
+   pair), sized for the page's own 30px radius and sat ABOVE the banner
+   (z-index 3, one higher than .task-ring's 2) so the banner never clips
+   its top 3px. Colour comes from --task-accent, set per deadline state —
+   see STATE_THEME in TaskDetailPage.jsx. Also reused, unmodified, as the
+   description panel's frame (a plain 3px padding box, no mask needed
+   there since the panel isn't an overlay). */
+.task-detail-ring {
+  --task-accent: linear-gradient(135deg, #e0c3fc 0%, #7c5fb0 50%, #8ec5fc 100%);
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  padding: 3px;
+  background: var(--task-accent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+/* --- TaskDetailPage celebrations: confetti (paper) -----------------------
+   Same three-nested-layer technique as the fw-* keyframes above (outer =
+   horizontal drift, middle = launch-then-gravity, core = tumble/shrink) —
+   one element with a diagonal transform cannot make an arc. Shared by the
+   subtask row burst; the page-level fireworks reuse fw-rise/fw-flash/
+   fw-ring/fw-spark verbatim, already defined above. */
+@keyframes conf-x {
+  to { transform: translateX(var(--dx)); }
+}
+@keyframes conf-y {
+  0%   { transform: translateY(0); }
+  42%  { transform: translateY(var(--peak)); }
+  100% { transform: translateY(var(--fall)); }
+}
+@keyframes conf-spin {
+  0%   { transform: rotate(0deg) scale(1); opacity: 1; }
+  72%  { opacity: 1; }
+  100% { transform: rotate(var(--rot)) scale(0.55); opacity: 0; }
+}
+
+/* --- TaskDetailPage celebrations: one-shot completion wash ---------------
+   Fires on both complete and reopen so the palette flip reads as an event
+   rather than a silent repaint. */
+@keyframes done-wash {
+  0%   { opacity: 0.85; transform: scale(0.9); }
+  100% { opacity: 0;    transform: scale(1.35); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-detail-fireworks,
+  .task-detail-confetti,
+  .task-detail-wash { display: none; }
+}
