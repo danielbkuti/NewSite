@@ -1,5 +1,5 @@
 from rest_framework import viewsets, permissions
-from ..models import Task, SubTask
+from ..models import Task, SubTask, TaskActivity
 from .serializers import TaskSerializer, SubTaskSerializer
 from rest_framework.filters import OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
@@ -23,7 +23,7 @@ class TaskViewSet(viewsets.ModelViewSet):
             Task.objects
             .filter(user=self.request.user)
             .select_related("user")
-            .prefetch_related("subtasks")
+            .prefetch_related("subtasks", "activity_log")
         )
 
     def perform_create(self, serializer):
@@ -45,3 +45,13 @@ class SubTaskViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save()
+
+    def perform_destroy(self, instance):
+        # Deletion doesn't go through SubTask.save(), so it's the one
+        # write path _log_subtask_changes never sees — logged here
+        # instead, against the parent task, before the row (and its
+        # name) actually goes away.
+        task = instance.task
+        name = instance.name
+        instance.delete()
+        TaskActivity.objects.create(task=task, message=f'Subtask "{name}" removed')

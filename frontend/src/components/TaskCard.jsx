@@ -293,6 +293,7 @@ export function SubtaskStackCard({
   // actually urgent/overdue.
   const [justSavedDeadline, setJustSavedDeadline] = useState(false)
   const deleteRef = useRef(null)
+  const dueChipAnchorRef = useRef(null)
   const checked = subtask.completed || justCompleted
   const countdown = useDeadlineStatus(subtask.dateDeadline, checked, { liveOverdue: true })
 
@@ -406,7 +407,7 @@ export function SubtaskStackCard({
         // one piece of context you actually want while picking a new
         // date (what it's currently set to) disappeared right when you
         // opened the picker.
-        <div className="relative shrink-0">
+        <div ref={dueChipAnchorRef} className="relative shrink-0">
           <PulseRing ready={(countdown.isOverdue || countdown.isUrgent) && pulseReady} forceOnce={justSavedDeadline} />
           <button
             type="button"
@@ -436,7 +437,12 @@ export function SubtaskStackCard({
                   : `Due ${formatDeadline(subtask.dateDeadline)}`}
           </button>
           {editingDeadline && (
-            <DeadlineEditor value={subtask.dateDeadline} onSave={handleDeadlineSave} onCancel={closeDeadlineEditor} />
+            <DeadlineEditor
+              anchorRef={dueChipAnchorRef}
+              value={subtask.dateDeadline}
+              onSave={handleDeadlineSave}
+              onCancel={closeDeadlineEditor}
+            />
           )}
         </div>
       ) : null}
@@ -512,13 +518,17 @@ export function SubtaskStackCard({
         )}
         style={
           editingDeadline
-            ? // The peek-stack's own `transform`/`opacity` (from `style`,
-              // set by TaskCard for the collapsed-stack scale/fade look)
-              // create a stacking context exactly like the card-level
-              // hover-lift did — trapping this row's own deadline-editor
-              // popover inside it instead of letting it paint above
-              // whatever's below. Neutralized only while editing; the
-              // peek visuals don't matter once you're mid-edit anyway.
+            ? // Used to also be load-bearing for DeadlineEditor itself:
+              // the peek-stack's `transform`/`opacity` (from `style`, set
+              // by TaskCard for the collapsed-stack scale/fade look)
+              // created a stacking context that trapped the popover's
+              // z-index below whatever was underneath. DeadlineEditor
+              // now renders through a portal straight into
+              // `document.body`, so it has no ancestor to be trapped by
+              // any more — but this neutralization is worth keeping
+              // anyway, purely cosmetic now: it reads the row at full
+              // scale/opacity while you're actually picking its date,
+              // rather than leaving it in its dimmed collapsed-peek look.
               { ...style, transform: 'none', opacity: 1 }
             : style
         }
@@ -715,6 +725,7 @@ export function TaskCard({
 }) {
   const navigate = useNavigate()
   const [editingDeadline, openDeadlineEditor, closeDeadlineEditor] = useExclusiveDeadlineEditor()
+  const dueChipAnchorRef = useRef(null)
   const [expanded, setExpanded] = useState(false)
   // The "Click to see more"/"Click to collapse" hint above the subtask
   // stack — deliberately not a plain CSS `:hover` reveal (instant, and
@@ -959,7 +970,7 @@ export function TaskCard({
             date — what it's currently set to — disappeared right when
             you opened the picker). `relative` here is what the editor
             (rendered alongside, not instead) anchors off of. */}
-        <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div ref={dueChipAnchorRef} className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
           {state === 'done' ? (
             // The banner now carries the completion date/outcome — this
             // slot repurposes into a quieter subtask summary, and drops
@@ -1019,6 +1030,7 @@ export function TaskCard({
           )}
           {editingDeadline && (
             <DeadlineEditor
+              anchorRef={dueChipAnchorRef}
               value={task.dateDeadline}
               onSave={handleDeadlineSave}
               onCancel={closeDeadlineEditor}
@@ -1165,10 +1177,18 @@ export function TaskCard({
                   resolves to plain white, which doesn't match a flooded
                   card's own tinted background and left a visible
                   square-cornered patch sitting on top of the last row's
-                  own rounded corner. */}
-              {!expanded && (
+                  own rounded corner. Only rendered when there's a second
+                  row actually stacked underneath (`rows.length > 1`) —
+                  with just one subtask, `stackHeight` is exactly one
+                  row's height, so this flat, hard-cornered bar had
+                  nothing to feather and just squared off that lone row's
+                  own rounded bottom corners instead. `rounded-b-lg`
+                  matches the row's own radius too, so even the
+                  multi-row case can't show a hard corner poking past the
+                  curve underneath it. */}
+              {!expanded && rows.length > 1 && (
                 <div
-                  className="pointer-events-none absolute inset-x-0 bottom-0 h-5"
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-5 rounded-b-lg"
                   style={{ background: `linear-gradient(to top, ${chrome.floodBase}, transparent)` }}
                 />
               )}

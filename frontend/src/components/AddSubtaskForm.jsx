@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DeadlineEditor } from '@/components/DeadlineEditor'
@@ -26,6 +26,7 @@ export function AddSubtaskForm({ onAdd, onCancel }) {
   const [name, setName] = useState('')
   const [dateDeadline, setDateDeadline] = useState(null)
   const [editingDeadline, openDeadlineEditor, closeDeadlineEditor] = useExclusiveDeadlineEditor()
+  const deadlineAnchorRef = useRef(null)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState(null)
 
@@ -69,7 +70,7 @@ export function AddSubtaskForm({ onAdd, onCancel }) {
         )}
       </div>
 
-      <div className="relative w-fit">
+      <div ref={deadlineAnchorRef} className="relative w-fit">
         <button
           type="button"
           onClick={() => (editingDeadline ? closeDeadlineEditor() : openDeadlineEditor())}
@@ -79,7 +80,7 @@ export function AddSubtaskForm({ onAdd, onCancel }) {
           {dateDeadline ? `Due ${formatDeadline(dateDeadline)}` : 'Set deadline'}
         </button>
         {editingDeadline && (
-          <DeadlineEditor value={dateDeadline} onSave={handlePickDeadline} onCancel={closeDeadlineEditor} />
+          <DeadlineEditor anchorRef={deadlineAnchorRef} value={dateDeadline} onSave={handlePickDeadline} onCancel={closeDeadlineEditor} />
         )}
       </div>
 
