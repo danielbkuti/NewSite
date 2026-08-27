@@ -504,11 +504,15 @@ export function SubtaskStackCard({
     return (
       <div
         className={cn(
-          // `border-2` (not the default 1px `border`) plus an explicit
-          // colour on the on-track case too — the theme's own default
-          // border token is nearly the same lightness as the card
-          // underneath it and all but disappeared.
-          'absolute inset-x-0 flex items-center gap-2 rounded-lg border-2 px-3 py-2 text-xs transition-all duration-300 ease-in-out',
+          // Back to the original 1px `border` weight — `border-2`
+          // read as noticeably heavier/boxier than the rest of the
+          // card's own delicate lines once actually visible. The fix
+          // for "can't see the outline" was the explicit colour below
+          // (the theme's own default border token is nearly the same
+          // lightness as the card underneath it and all but
+          // disappeared), not the extra thickness — keeping the colour,
+          // dropping the thickness back down.
+          'absolute inset-x-0 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-all duration-300 ease-in-out',
           dimmed
             ? 'bg-muted/60 text-muted-foreground shadow-none'
             : parentState !== 'progress'
@@ -1010,11 +1014,23 @@ export function TaskCard({
               </button>
             </span>
           ) : (
-            // 'progress' — unchanged from before Card-states.md: still
-            // the quick way to see/set this task's own deadline from
-            // the list, deliberately kept rather than repurposed into a
-            // subtask-count badge (that would remove the only quick
-            // deadline entry point this card has).
+            // 'progress' — still the quick way to see/set this task's
+            // own deadline from the list, deliberately kept rather than
+            // repurposed into a subtask-count badge (that would remove
+            // the only quick deadline entry point this card has). Blue
+            // rather than the generic amber every other "set a
+            // deadline" trigger in the app uses — same `#4f7fd4` this
+            // state's own banner shades into on its right side (where
+            // its "Open"/action button sits — see `STATE_CHROME.progress
+            // .bannerTo` and `StateBanner` above) and the same blue
+            // `STATE_THEME.far`'s ring/cta gradients end on on the task
+            // detail page, just given a light-tint/dark-text pairing of
+            // that hue (this app has no pre-made soft/strong pair for
+            // blue the way it does for purple's `#f3e8ff`/`#6b46a8`).
+            // Amber stays everywhere else (subtask due-chips,
+            // AddSubtaskForm, NewTaskPage): this is the one badge always
+            // sitting on top of this exact state, so it's the one place
+            // amber actually clashed rather than just being neutral.
             <span className="relative inline-flex">
               <button
                 type="button"
@@ -1022,7 +1038,7 @@ export function TaskCard({
                   setAddingSubtask(false)
                   toggleDeadlineEditor()
                 }}
-                className="relative rounded-full bg-amber-50 px-3 py-1 text-xs font-medium tabular-nums text-amber-700 transition-colors hover:bg-amber-100"
+                className="relative rounded-full bg-[#e9f0fb] px-3 py-1 text-xs font-medium tabular-nums text-[#1e488f] transition-colors hover:bg-[#d4e1f7]"
               >
                 {task.dateDeadline ? `Due ${formatDeadline(task.dateDeadline)}` : 'Set deadline'}
               </button>
