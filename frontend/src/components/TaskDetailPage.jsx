@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { ArrowLeft, Check, CircleCheckBig, Hourglass, Pencil, Trash2, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, Check, CircleCheckBig, Clock, Hourglass, Pencil, Plus, RotateCcw, Trash2, TriangleAlert } from 'lucide-react'
 import { updateTask, deleteTask, createSubTask, updateSubTask, deleteSubTask } from '@/lib/tasks'
 import { cn, formatDeadline, calculateProgress, isDeadlineUrgent } from '@/lib/utils'
 import { useDeadlineStatus } from '@/hooks/useDeadlineStatus'
@@ -30,10 +30,11 @@ const WASH_MS = 950
 // fading — it's a one-time heads-up on opening the page, not a
 // persistent banner.
 const DEADLINE_HINT_MS = 5000
-// Same cap as the main task list's Completed section — only the
-// freshest few completed subtasks show here, the rest live on
-// /progress alongside every other completed task/subtask.
-const COMPLETED_SUBTASK_PREVIEW_COUNT = 3
+// How many activity-log rows show before a "View more" reveals the
+// next batch — client-side only, `task.activityLog` already arrives in
+// full (see backend/tasks/api/serializers.py), there's no pagination
+// to ask the server for.
+const ACTIVITY_PAGE_SIZE = 10
 
 // One state object drives every chrome value on the page — the
 // deadline owns the palette (`handoff 2/TaskDetailPage-5b.md` §3).
@@ -67,6 +68,11 @@ const STATE_THEME = {
     ctaShadow: '0 10px 24px -14px rgba(107,70,168,.6)',
     windowFill: 'linear-gradient(90deg,#e0c3fc,#7c5fb0)',
     glyph: null,
+    // Activity spine (ActivityLog-6b.md §3/§8): the gradient's top stop
+    // and the rail's own muted tone — both new keys this state didn't
+    // need before the spine existed.
+    spineTop: '#4f8ef7',
+    muted: 'oklch(0.556 0 0)',
   },
   'due-soon': {
     flood:
@@ -86,6 +92,8 @@ const STATE_THEME = {
     windowFill: 'linear-gradient(90deg,#fbbf24,#b45309)',
     glyph: Hourglass,
     glyphDurationMs: 2400,
+    spineTop: '#e0562f',
+    muted: '#a86a45',
   },
   overdue: {
     flood:
@@ -105,6 +113,8 @@ const STATE_THEME = {
     windowFill: 'linear-gradient(90deg,#f87171,#7f1d1d)',
     glyph: TriangleAlert,
     glyphDurationMs: 1800,
+    spineTop: '#dc2626',
+    muted: '#a15c5c',
   },
   completed: {
     flood:
@@ -123,6 +133,8 @@ const STATE_THEME = {
     ctaShadow: '0 10px 24px -14px rgba(5,150,105,.85)',
     windowFill: 'linear-gradient(90deg,#6ee7b7,#047857)',
     glyph: CircleCheckBig,
+    spineTop: '#059669',
+    muted: '#5f8a76',
   },
 }
 
@@ -517,32 +529,69 @@ export function TaskDetailPage() {
   // relative order. Completed ones follow as their own group, ordered
   // by dateCompleted descending — the most recently finished one lands
   // right at the top of that group (i.e. right after the open ones),
-  // not at the very bottom of the page. Only the freshest few of those
-  // render inline; the rest are on /progress, same cap as the main
-  // task list's Completed section.
+  // not at the very bottom of the page. Every completed subtask renders
+  // inline here — no cap, no "view more" out to /progress — the page
+  // just grows to fit; unlike the main task list (many tasks competing
+  // for space), this page is already about one task.
   const openSubtasks = task.subtasks.filter((s) => !s.completed || celebratingIds.has(s.id))
   const completedSubtasks = task.subtasks
     .filter((s) => s.completed && !celebratingIds.has(s.id))
     .sort((a, b) => new Date(b.dateCompleted) - new Date(a.dateCompleted))
-  const visibleCompletedSubtasks = completedSubtasks.slice(0, COMPLETED_SUBTASK_PREVIEW_COUNT)
-  const hiddenCompletedSubtaskCount = completedSubtasks.length - visibleCompletedSubtasks.length
+  const visibleCompletedSubtasks = completedSubtasks
   const sortedSubtasks = [...openSubtasks, ...visibleCompletedSubtasks]
 
   const hasSubtasks = task.subtasks.length > 0
   const openCount = openSubtasks.length
 
-  // Banner copy per state — "far" gets no banner at all (a page with
-  // nothing urgent to say should stay quiet, same rule TaskCard's own
-  // in-progress state follows).
+  // A subtask can be overdue/due-soon on its own even when the task's
+  // own deadline (if it even has one) says otherwise — "Demo: cascade
+  // with 5 subtasks" has no deadline of its own (always 'far') but can
+  // easily have an overdue subtask buried in its list, with nothing on
+  // the page ever saying so. Excludes celebrating (just-checked) ones —
+  // those are effectively done, same as everywhere else on this page.
+  const stillOpenSubtasks = task.subtasks.filter((s) => !s.completed && !celebratingIds.has(s.id))
+  const overdueSubtasks = stillOpenSubtasks.filter((s) => s.dateDeadline && new Date(s.dateDeadline).getTime() <= Date.now())
+  const dueSoonSubtasks = stillOpenSubtasks.filter((s) => isDeadlineUrgent(s.dateDeadline, false))
+
+  // Banner copy per state — "far" gets no banner at all, *unless* a
+  // subtask needs attention the task's own state doesn't already
+  // cover (below). A subtask alert never overrides the task's own
+  // overdue/due-soon banner (that's already the more urgent fact) but
+  // does take priority over the calm default and, since an overdue
+  // subtask is worse than the task merely being due soon, over the
+  // task's own due-soon banner too. Deliberately not tinted by
+  // STATE_THEME — this is a fixed purple "something inside needs a
+  // look" colour, distinct from the page's own true state, so it never
+  // gets confused for that state's own real deadline.
+  const SUBTASK_ALERT_BANNER = 'linear-gradient(90deg,#6b46a8,#4f7fd4)'
   let bannerCopy = null
   let bannerAction = null
-  if (stateKey === 'due-soon') {
+  let bannerBackground = theme.banner
+  let BannerGlyph = Glyph
+  let bannerGlyphDurationMs = theme.glyphDurationMs
+  if (stateKey === 'overdue') {
+    bannerCopy = `Overdue by ${deadlineStatus.overdueDisplay ?? '—'} — was due ${formatDeadline(task.dateDeadline)}`
+    bannerAction = { label: 'Reschedule', onClick: () => openAddDeadlineEditor() }
+  } else if (overdueSubtasks.length > 0) {
+    bannerCopy =
+      overdueSubtasks.length === 1
+        ? `"${overdueSubtasks[0].name}" is overdue`
+        : `${pluralize(overdueSubtasks.length, 'subtask')} are overdue`
+    bannerBackground = SUBTASK_ALERT_BANNER
+    BannerGlyph = TriangleAlert
+    bannerGlyphDurationMs = 1800
+  } else if (stateKey === 'due-soon') {
     const base = `Due today in ${deadlineStatus.countdownDisplay}`
     bannerCopy = openCount > 0 ? `${base} — ${pluralize(openCount, 'subtask')} still open` : base
     bannerAction = { label: 'Reschedule', onClick: () => openAddDeadlineEditor() }
-  } else if (stateKey === 'overdue') {
-    bannerCopy = `Overdue by ${deadlineStatus.overdueDisplay ?? '—'} — was due ${formatDeadline(task.dateDeadline)}`
-    bannerAction = { label: 'Reschedule', onClick: () => openAddDeadlineEditor() }
+  } else if (dueSoonSubtasks.length > 0) {
+    bannerCopy =
+      dueSoonSubtasks.length === 1
+        ? `"${dueSoonSubtasks[0].name}" is due soon`
+        : `${pluralize(dueSoonSubtasks.length, 'subtask')} are due soon`
+    bannerBackground = SUBTASK_ALERT_BANNER
+    BannerGlyph = Hourglass
+    bannerGlyphDurationMs = 2400
   } else if (stateKey === 'completed') {
     bannerCopy = completionBannerCopy(task)
     bannerAction = { label: 'Reopen', onClick: handleToggleTaskComplete }
@@ -585,14 +634,14 @@ export function TaskDetailPage() {
         {bannerCopy && (
           <div
             className="relative z-[2] flex items-center gap-2.5 py-2.5 pr-[22px] pl-5 text-white"
-            style={{ background: theme.banner, transition: 'background 700ms ease' }}
+            style={{ background: bannerBackground, transition: 'background 700ms ease' }}
           >
-            {Glyph && (
-              <Glyph
+            {BannerGlyph && (
+              <BannerGlyph
                 aria-hidden="true"
                 strokeWidth={2.4}
                 className={cn('size-[15px] shrink-0', stateKey !== 'completed' && 'animate-glyph-beat')}
-                style={theme.glyphDurationMs ? { animationDuration: `${theme.glyphDurationMs}ms` } : undefined}
+                style={bannerGlyphDurationMs ? { animationDuration: `${bannerGlyphDurationMs}ms` } : undefined}
               />
             )}
             <p className="flex-1 text-[12.5px] font-black tracking-[.01em] tabular-nums">{bannerCopy}</p>
@@ -810,6 +859,7 @@ export function TaskDetailPage() {
                         onToggle={(value) => handleToggleSubtask(subtask, value)}
                         onRename={(name) => handleRenameSubtask(subtask, name)}
                         onDelete={() => handleDeleteSubtask(subtask)}
+                        onSetDeadline={(dateDeadline) => handleSetSubtaskDeadline(subtask, dateDeadline)}
                       />
                     )
                   }}
@@ -839,18 +889,12 @@ export function TaskDetailPage() {
                   </button>
                 )}
               </div>
-
-              {hiddenCompletedSubtaskCount > 0 && (
-                <Link to="/progress" className="mt-1 ml-3.5 inline-block text-[11.5px] font-bold hover:underline" style={{ color: theme.strong }}>
-                  View {hiddenCompletedSubtaskCount} more completed →
-                </Link>
-              )}
             </section>
           </div>
         </div>
       </div>
 
-      <ActivityLog entries={task.activityLog} />
+      <ActivityLog entries={task.activityLog} theme={theme} />
 
       {deadlineHintMounted && (
         <div
@@ -1122,16 +1166,22 @@ function DescriptionPanel({ description, onSave, border, strong }) {
     <div className="overflow-hidden rounded-[18px] p-[3px] shadow-[0_10px_26px_-22px_rgba(0,0,0,.35)]" style={{ background: border }}>
       <div className="rounded-[15px] bg-white/94 px-[18px] py-4">
         {editing ? (
-          <div className="flex flex-col gap-2">
+          // The textarea *is* the panel here — no separate bordered
+          // box nested inside it (a "box in a box" against the
+          // panel's own frame) — same font size/line-height/max-width
+          // as the read view below, so switching into edit mode
+          // doesn't visually jump.
+          <div className="flex flex-col gap-2.5">
             <textarea
               autoFocus
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               rows={5}
-              className="w-full max-w-[62ch] resize-y rounded-md border border-input bg-white px-3 py-2 text-[14.5px] leading-[1.72] outline-none focus-visible:border-ring"
+              className="w-full max-w-[62ch] resize-y bg-transparent text-[14.5px] leading-[1.72] outline-none"
+              style={{ color: 'oklch(0.28 0 0)' }}
               placeholder="Add some context so this task still makes sense next week."
             />
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 border-t border-black/[.06] pt-2.5">
               <button type="button" onClick={handleSave} disabled={saving} className="text-xs font-bold text-emerald-700 hover:underline">
                 {saving ? 'Saving…' : 'Save'}
               </button>
@@ -1167,13 +1217,16 @@ function DescriptionPanel({ description, onSave, border, strong }) {
             </p>
           </div>
         ) : (
-          <p className="text-sm" style={{ color: 'oklch(0.556 0 0)' }}>
+          // The whole empty-state line is the click target now, not
+          // just the "Add some context" words — a blank box with only
+          // a few words of it actually clickable read as broken.
+          <button type="button" onClick={startEditing} className="block w-full text-left text-sm" style={{ color: 'oklch(0.556 0 0)' }}>
             No description yet.{' '}
-            <button type="button" onClick={startEditing} className="font-bold hover:underline" style={{ color: strong }}>
+            <span className="font-bold" style={{ color: strong }}>
               Add some context
-            </button>{' '}
+            </span>{' '}
             so this task still makes sense next week.
-          </p>
+          </button>
         )}
       </div>
     </div>
@@ -1256,59 +1309,74 @@ function DetailSubtaskRow({ index, subtask, checked, confetti, busy, theme, onTo
     closeDeadlineEditor()
   }
 
-  const indexColor = checked ? '#047857' : theme.strong
+  // A row borrows its OWN urgency's palette rather than the page's —
+  // same principle as completed rows always being emerald regardless
+  // of page state (§3/§5 of the original handoff), extended to cover
+  // overdue/due-soon too: an overdue subtask reads as overdue (red)
+  // even sitting on an otherwise-calm 'far' page, and a due-soon one
+  // reads amber the same way. Only a row with no urgency of its own
+  // falls back to the page's theme.
+  const rowPalette = status.isOverdue ? STATE_THEME.overdue : status.isUrgent ? STATE_THEME['due-soon'] : theme
+
+  const indexColor = checked ? '#047857' : rowPalette.strong
   const rowBg = checked ? 'bg-[rgba(240,253,246,0.75)] hover:bg-[rgba(240,253,246,0.9)]' : 'bg-transparent hover:bg-white/80'
 
-  let badge = null
+  // Done badge is a plain, non-interactive span (editing a completed
+  // subtask's deadline isn't a thing anywhere else in the app either).
+  // Every other case — overdue/urgent/plain-future *and* no-deadline-yet
+  // — is a real button that opens the same DeadlineEditor popover, so a
+  // subtask that already has a deadline can actually have it changed
+  // from this page; before this it was only ever settable once, from
+  // nothing, never editable again afterward.
+  let badgeContent, badgeClassName, badgeStyle
   if (checked) {
-    badge = (
-      <span className="rounded-full bg-[#d1fae5] px-2 py-0.5 text-[11px] font-black text-[#047857] tabular-nums">
-        {subtask.dateCompleted ? `Done ${formatShortDate(subtask.dateCompleted)}` : 'Done'}
-      </span>
-    )
+    badgeContent = subtask.dateCompleted ? `Done ${formatShortDate(subtask.dateCompleted)}` : 'Done'
+    badgeClassName = 'rounded-full bg-[#d1fae5] px-2 py-0.5 text-[11px] font-black text-[#047857] tabular-nums'
+  } else if (subtask.dateDeadline && status.isOverdue) {
+    // Fixed red, not the page's own theme — same reasoning as
+    // rowPalette above — plus a pulse, so an overdue subtask can't get
+    // lost in the row the way a plain badge would.
+    badgeContent = status.overdueDisplay ? `${status.overdueDisplay} overdue` : 'Overdue'
+    badgeClassName =
+      'animate-badge-pulse-red rounded-full px-2 py-0.5 text-[11px] font-black tabular-nums transition-[filter] hover:brightness-95'
+    badgeStyle = { background: STATE_THEME.overdue.soft, color: STATE_THEME.overdue.strong }
+  } else if (subtask.dateDeadline && status.isUrgent) {
+    badgeContent = `Due in ${status.countdownDisplay}`
+    badgeClassName =
+      'animate-badge-pulse-ember rounded-full px-2 py-0.5 text-[11px] font-black tabular-nums transition-[filter] hover:brightness-95'
+    badgeStyle = { background: STATE_THEME['due-soon'].soft, color: STATE_THEME['due-soon'].strong }
   } else if (subtask.dateDeadline) {
-    if (status.isOverdue) {
-      badge = (
-        <span className="rounded-full px-2 py-0.5 text-[11px] font-black tabular-nums" style={{ background: theme.soft, color: theme.strong }}>
-          {status.overdueDisplay ? `${status.overdueDisplay} overdue` : 'Overdue'}
-        </span>
-      )
-    } else if (status.isUrgent) {
-      badge = (
-        <span className="rounded-full px-2 py-0.5 text-[11px] font-black tabular-nums" style={{ background: theme.soft, color: theme.strong }}>
-          Due in {status.countdownDisplay}
-        </span>
-      )
-    } else {
-      badge = (
-        <span className="rounded-full bg-[#fffbeb] px-2 py-0.5 text-[11px] font-black text-[#b45309] tabular-nums">
-          Due {formatDeadline(subtask.dateDeadline)}
-        </span>
-      )
-    }
+    badgeContent = `Due ${formatDeadline(subtask.dateDeadline)}`
+    badgeClassName = 'rounded-full bg-[#fffbeb] px-2 py-0.5 text-[11px] font-black text-[#b45309] tabular-nums transition-colors hover:bg-[#fef3c7]'
   } else {
     // No deadline yet, same amber pill every other "set a deadline"
     // trigger in the app already uses (AddSubtaskForm's own included).
-    badge = (
-      <div ref={deadlineAnchorRef} className="relative shrink-0">
-        <button
-          type="button"
-          onClick={() => (editingDeadline ? closeDeadlineEditor() : openDeadlineEditor())}
-          className="rounded-full bg-[#fffbeb] px-2 py-0.5 text-[11px] font-black text-[#b45309] transition-colors hover:bg-[#fef3c7]"
-        >
-          Set deadline
-        </button>
-        {editingDeadline && (
-          <DeadlineEditor anchorRef={deadlineAnchorRef} value={null} onSave={handleDeadlineSave} onCancel={closeDeadlineEditor} />
-        )}
-      </div>
-    )
+    badgeContent = 'Set deadline'
+    badgeClassName = 'rounded-full bg-[#fffbeb] px-2 py-0.5 text-[11px] font-black text-[#b45309] transition-colors hover:bg-[#fef3c7]'
   }
+
+  const badge = checked ? (
+    <span className={badgeClassName}>{badgeContent}</span>
+  ) : (
+    <div ref={deadlineAnchorRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => (editingDeadline ? closeDeadlineEditor() : openDeadlineEditor())}
+        className={badgeClassName}
+        style={badgeStyle}
+      >
+        {badgeContent}
+      </button>
+      {editingDeadline && (
+        <DeadlineEditor anchorRef={deadlineAnchorRef} value={subtask.dateDeadline} onSave={handleDeadlineSave} onCancel={closeDeadlineEditor} />
+      )}
+    </div>
+  )
 
   return (
     <div
       className={cn('relative flex items-center gap-[13px] border-t px-3.5 py-[13px] transition-colors duration-500', rowBg)}
-      style={{ borderColor: theme.hairline }}
+      style={{ borderColor: rowPalette.hairline }}
     >
       {confetti && <SubtaskConfetti />}
       <button
@@ -1320,7 +1388,7 @@ function DetailSubtaskRow({ index, subtask, checked, confetti, busy, theme, onTo
           'flex size-[19px] shrink-0 items-center justify-center rounded-[6px] border-[1.5px] transition-colors',
           checked ? 'border-emerald-500 bg-emerald-500' : 'bg-white'
         )}
-        style={!checked ? { borderColor: theme.strong } : undefined}
+        style={!checked ? { borderColor: rowPalette.strong } : undefined}
       >
         {checked && <Check className="size-[11px] text-white" strokeWidth={3} aria-hidden="true" />}
       </button>
@@ -1358,7 +1426,7 @@ function DetailSubtaskRow({ index, subtask, checked, confetti, busy, theme, onTo
           type="button"
           onClick={() => setRenaming(true)}
           className="min-w-0 flex-1 truncate text-left text-sm font-bold"
-          style={{ color: checked ? 'oklch(0.556 0 0)' : theme.title, textDecoration: checked ? 'line-through' : 'none' }}
+          style={{ color: checked ? 'oklch(0.556 0 0)' : rowPalette.title, textDecoration: checked ? 'line-through' : 'none' }}
         >
           {subtask.name}
         </button>
@@ -1510,29 +1578,189 @@ function SubtaskFlipList({ subtasks, children }) {
   )
 }
 
-// A plain, oldest-first log of every committed change to this task and
-// its subtasks — created, renamed, completed/reopened, deadline set/
-// changed/cleared, subtask added/removed. Sits below the page shell
-// (not part of the card itself, per the request that introduced this).
-// Deliberately undesigned for now: no icons, no grouping, no
-// state-theme colours — just a vertical list of "{message} — {date}"
-// lines. `entries` comes straight off `task.activityLog`, populated
-// entirely server-side (see backend/tasks/models.py's
-// _log_task_changes/_log_subtask_changes) — nothing here computes or
-// guesses at what changed.
-function ActivityLog({ entries }) {
+// Consecutive same-kind events fold into one row, summing a count into
+// line 1 (ActivityLog-6b.md §6) — only for the three kinds that
+// realistically burst (a subtask checked/added/removed in a run).
+// Renames, deadline changes, and completion are never collapsed, even
+// back to back — each one is its own fact worth its own line.
+const COLLAPSE_WINDOW_MS = 5 * 60 * 1000
+const COLLAPSIBLE_KINDS = new Set(['check', 'add', 'remove'])
+
+function collapsedLabel(kind, count) {
+  if (kind === 'check') return `${pluralize(count, 'subtask')} checked`
+  if (kind === 'add') return `${pluralize(count, 'subtask')} added`
+  return `${pluralize(count, 'subtask')} removed`
+}
+
+// Classifies a precomputed log message into a spine node's kind/icon/
+// fill (ActivityLog-6b.md §5) purely by pattern-matching its text —
+// the backend only ever wrote a plain sentence (see
+// backend/tasks/models.py's _log_task_changes/_log_subtask_changes),
+// no structured event type, and per the handoff's own scope ("no
+// changes to how events are fetched, ordered, or written") that stays
+// true here too. `hollow` nodes (renames) get a white fill + coloured
+// ring instead of a solid fill, per the handoff's "filled = something
+// changed the task, hollow = something changed its text" rule —
+// extended from just "description edited" (not yet its own logged
+// event) to cover subtask/task renames, the other text-only change
+// this app actually logs today.
+function classifyActivity(message) {
+  // Every message the backend writes follows a fixed template with the
+  // task/subtask's own (arbitrary, user-chosen) name quoted in the
+  // middle — `Subtask "X" removed`, never `removed` itself inside the
+  // name. Matching on the message's actual *tail* (or, for the two
+  // deadline-value variants, a fixed multi-word phrase) rather than a
+  // bare `includes()` on the whole string is what keeps a subtask
+  // literally named e.g. "Verify set-deadline" from misclassifying its
+  // own "added"/"removed" events as a deadline change just because the
+  // word "deadline" happens to appear in its name.
+  if (message.endsWith('marked complete')) {
+    return message.startsWith('Task')
+      ? { kind: 'complete', Icon: CircleCheckBig, fill: '#047857' }
+      : { kind: 'check', Icon: Check, fill: '#10b981' }
+  }
+  if (message.endsWith('reopened')) {
+    return { kind: 'reopen', Icon: RotateCcw, fill: '#64748b' }
+  }
+  if (message.includes('" renamed to "')) {
+    return { kind: 'rename', Icon: Pencil, hollow: true, ring: '#4f8ef7' }
+  }
+  if (
+    message.endsWith('deadline cleared') ||
+    message.includes('deadline set to ') ||
+    message.includes('deadline changed to ')
+  ) {
+    return { kind: 'deadline', Icon: Clock, fill: '#b45309' }
+  }
+  if (message.endsWith('removed')) {
+    return { kind: 'remove', Icon: Trash2, fill: '#7c5fb0' }
+  }
+  // Covers both "Task created" and "Subtask ... added".
+  return { kind: 'add', Icon: Plus, fill: '#7c5fb0' }
+}
+
+// `entries` arrive oldest-first (see TaskActivitySerializer's
+// ordering); this walks them in that order so "consecutive" and "the
+// group's newest timestamp" both mean the right thing, then the caller
+// reverses the result for newest-first display.
+function collapseActivity(entries) {
+  const rows = []
+  for (const entry of entries) {
+    const info = classifyActivity(entry.message)
+    const last = rows[rows.length - 1]
+    const withinWindow =
+      last && new Date(entry.dateCreated) - new Date(last.dateCreated) <= COLLAPSE_WINDOW_MS
+    if (COLLAPSIBLE_KINDS.has(info.kind) && last?.kind === info.kind && withinWindow) {
+      last.count += 1
+      last.dateCreated = entry.dateCreated
+    } else {
+      rows.push({ ...info, id: entry.id, message: entry.message, dateCreated: entry.dateCreated, count: 1 })
+    }
+  }
+  return rows
+}
+
+// Relative under 24h, absolute beyond — same rule the due-date badges
+// elsewhere already follow (ActivityLog-6b.md §4).
+function formatActivityTime(iso) {
+  const diff = Date.now() - new Date(iso).getTime()
+  if (diff < 60000) return 'just now'
+  if (diff < 3600000) return `${Math.max(1, Math.floor(diff / 60000))}m ago`
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
+  return formatDeadline(iso)
+}
+
+// Full-width, below the page shell — the original placement/sizing
+// this page's activity log always had, just with `ActivityLog-6b.md`'s
+// spine/node visual language grafted on (bigger throughout than the
+// handoff's own rail-digest sizing, since there's a full content
+// column of room here instead of 246px). Shows *every* event, no
+// four-row cap and no "Full history →" link — there's nowhere else in
+// this app that full history would even go yet, and this was explicit
+// in the request that drove this version: everything belongs on the
+// one screen. No actor line either (`You · ...` dropped) — every event
+// on this page is the same one account, so naming the actor adds
+// nothing.
+function ActivityLog({ entries, theme }) {
+  // Reveals ACTIVITY_PAGE_SIZE more rows per click rather than the
+  // usual "hidden count → link out" pattern elsewhere on this page —
+  // there's nowhere else for activity to go (no per-task history view
+  // exists), so "View more" has to grow this same list in place until
+  // everything's shown.
+  const [visibleCount, setVisibleCount] = useState(ACTIVITY_PAGE_SIZE)
+
   if (!entries || entries.length === 0) return null
+
+  // Oldest-first is what §6's collapsing wants to walk; reversed only
+  // for display, since the spine itself reads newest-at-top.
+  const allRows = [...collapseActivity(entries)].reverse()
+  const rows = allRows.slice(0, visibleCount)
+  const remaining = allRows.length - rows.length
 
   return (
     <div className="mt-6">
-      <h2 className="text-xs font-bold tracking-wide text-muted-foreground uppercase">Activity log</h2>
-      <div className="mt-2 flex flex-col gap-1.5">
-        {entries.map((entry) => (
-          <p key={entry.id} className="text-sm text-muted-foreground">
-            {entry.message} <span className="text-xs">— {formatDeadline(entry.dateCreated)}</span>
-          </p>
+      <div className="flex items-center gap-2.5">
+        <h2 className="text-[11px] font-black tracking-[.12em] uppercase" style={{ color: theme.strong }}>
+          Activity
+        </h2>
+        <span className="h-px flex-1" style={{ background: `linear-gradient(90deg,${theme.hairline},rgba(255,255,255,0))` }} />
+        <span className="text-xs font-bold tabular-nums" style={{ color: theme.muted }}>
+          {entries.length}
+        </span>
+      </div>
+
+      <div className="relative mt-4 flex flex-col gap-4 pl-8">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute w-[3px] rounded-full opacity-70"
+          style={{
+            left: '9.5px',
+            top: '10px',
+            bottom: '14px',
+            background: `linear-gradient(180deg,${theme.spineTop} 0%,#7c5fb0 52%,#8ec5fc 100%)`,
+          }}
+        />
+        {rows.map((row) => (
+          <div key={row.id} className="relative flex flex-col gap-1">
+            <span
+              aria-hidden="true"
+              className="absolute flex size-5 items-center justify-center rounded-full"
+              style={{
+                left: '-32px',
+                top: '0px',
+                background: row.hollow ? '#fff' : row.fill,
+                boxShadow: row.hollow
+                  ? `0 0 0 2.5px ${row.ring}, 0 0 0 5.5px rgba(255,255,255,.95)`
+                  : '0 0 0 3px rgba(255,255,255,.95)',
+              }}
+            >
+              <row.Icon
+                className="size-3"
+                strokeWidth={row.kind === 'check' ? 3.6 : 3}
+                style={{ color: row.hollow ? row.ring : '#fff' }}
+                aria-hidden="true"
+              />
+            </span>
+            <p className="text-sm leading-[1.4] font-bold" style={{ color: 'oklch(0.28 0 0)' }}>
+              {row.count > 1 ? collapsedLabel(row.kind, row.count) : row.message}
+            </p>
+            <p className="text-xs font-bold" style={{ color: theme.muted }}>
+              {formatActivityTime(row.dateCreated)}
+            </p>
+          </div>
         ))}
       </div>
+
+      {remaining > 0 && (
+        <button
+          type="button"
+          onClick={() => setVisibleCount((n) => n + ACTIVITY_PAGE_SIZE)}
+          className="mt-3 ml-8 text-xs font-bold hover:underline"
+          style={{ color: theme.strong }}
+        >
+          View {Math.min(remaining, ACTIVITY_PAGE_SIZE)} more
+        </button>
+      )}
     </div>
   )
 }
