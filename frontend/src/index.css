@@ -403,3 +403,26 @@
   .task-detail-confetti,
   .task-detail-wash { display: none; }
 }
+
+/* --- TaskDetailPage: subtask deadline badge pulse ------------------------
+   A small-scale ring pulse for a single badge/chip — same technique as
+   .animate-flash-emerald above (box-shadow spread only, no blur/offset,
+   so it reads cleanly at chip size) but looped, for a subtask row whose
+   own deadline is overdue/urgent even when the page around it isn't. */
+@keyframes badge-pulse-red {
+  0%   { box-shadow: 0 0 0 0 rgb(185 28 28 / 0.55); }
+  70%  { box-shadow: 0 0 0 6px rgb(185 28 28 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(185 28 28 / 0); }
+}
+@keyframes badge-pulse-ember {
+  0%   { box-shadow: 0 0 0 0 rgb(154 52 18 / 0.5); }
+  70%  { box-shadow: 0 0 0 6px rgb(154 52 18 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(154 52 18 / 0); }
+}
+.animate-badge-pulse-red   { animation: badge-pulse-red   1.8s ease-out infinite; }
+.animate-badge-pulse-ember { animation: badge-pulse-ember 2.4s ease-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-badge-pulse-red,
+  .animate-badge-pulse-ember { animation: none; }
+}
