@@ -115,8 +115,13 @@ function UpcomingRow({ item, celebrating, onToggle }) {
     // TaskCard; the checkbox is the only control here.
     <div
       onClick={() => navigate(`/tasks/${item.taskId}`)}
-      className="flex cursor-pointer items-center gap-3 rounded-xl bg-card px-4 py-3 text-sm ring-1 ring-foreground/10 transition-colors hover:bg-accent/50"
+      className="relative flex cursor-pointer items-center gap-3 rounded-xl bg-card px-4 py-3 text-sm ring-1 ring-foreground/10 transition-colors hover:bg-accent/50"
     >
+      {/* Same masked-border gradient ring TaskCard's own cards use
+          (.task-ring, index.css) — no per-state accent override here,
+          just its own default brand gradient, since an Upcoming row has
+          no state chrome of its own to track. */}
+      <span aria-hidden="true" className="task-ring" />
       <Checkbox
         checked={item.completed}
         onCheckedChange={handleToggle}

@@ -70,7 +70,7 @@ def send_password_reset_email(user):
         'user': user,
         'reset_url': reset_url,
     })
-    send_mail('Reset your FlexMaster password', message, 'noreply@yourdomain.com', [user.email])
+    send_mail('Reset your Fauxcus password', message, 'noreply@yourdomain.com', [user.email])
 
 
 def generate_username_from_name(first_name, last_name):

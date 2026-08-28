@@ -2,15 +2,9 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Logo } from '@/components/Logo'
 import { requestPasswordReset } from '@/lib/auth'
 import { cn } from '@/lib/utils'
-
-const LOGO_GRADIENT_STYLE = {
-  backgroundImage: 'linear-gradient(to bottom right, #e0c3fc, #7c5fb0, #8ec5fc)',
-  backgroundAttachment: 'fixed',
-  backgroundSize: '100vw 100vh',
-  backgroundPosition: '0 0',
-}
 
 // Step 1 of forgot-password — just an email, same shape as SignupForm's
 // own first step. Always ends on the same "check your email" state
@@ -47,12 +41,7 @@ export function ForgotPasswordForm() {
     return (
       <Card className="w-full max-w-sm zoom-[1.125] border-transparent bg-[#f8f9fa] text-black shadow-2xl">
         <CardContent className="flex flex-col items-center gap-3 pt-6 text-center">
-          <span
-            className="bg-clip-text text-3xl font-bold text-transparent [-webkit-text-fill-color:transparent]"
-            style={LOGO_GRADIENT_STYLE}
-          >
-            FlexMaster
-          </span>
+          <Logo scale="secondary" />
           <h2 className="text-2xl font-bold text-black">Check your email</h2>
           <p className="text-sm text-black/70">
             If an account exists for <span className="font-semibold">{email}</span>, we&apos;ve
@@ -72,12 +61,7 @@ export function ForgotPasswordForm() {
   return (
     <Card className="w-full max-w-sm zoom-[1.125] border-transparent bg-[#f8f9fa] text-black shadow-2xl">
       <CardContent className="flex flex-col gap-5 pt-6">
-        <span
-          className="self-center bg-clip-text text-3xl font-bold text-transparent [-webkit-text-fill-color:transparent]"
-          style={LOGO_GRADIENT_STYLE}
-        >
-          FlexMaster
-        </span>
+        <Logo scale="secondary" className="self-center" />
 
         <div className="flex flex-col gap-2">
           <h2 className="text-2xl font-bold text-black">Reset your password</h2>

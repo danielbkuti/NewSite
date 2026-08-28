@@ -122,13 +122,19 @@ function Shell({ em, e }) {
   )
 }
 
-// Temporarily disabled — reported broken/damaged, needs a real fix
-// later. This is the one gate: every call site's own trigger logic
-// (celebratingIds, timers, `justCompleted`/`celebrating` props) is
-// untouched and still runs exactly as before, it just no longer mounts
-// anything visible. Flip back to `true` (or remove this early return)
-// once it's fixed, everything below is otherwise ready to go.
-const FIREWORKS_ENABLED = false
+// Was disabled app-wide ("reported broken/damaged") — root cause found
+// and fixed: TaskCard's collapsed subtask stack gives every row its own
+// `transform` (for the peek-scale effect), which opens a fresh CSS
+// stacking context per row. A burst mounted on a row with a lower
+// resting z-index than its neighbors was rendered *inside* that row's
+// own context, so it painted entirely behind whichever row sits in
+// front of it in the stack — the burst wasn't actually damaged, it was
+// invisible, chopped off wherever it crossed under a neighboring card.
+// Same class of bug this codebase already diagnosed once for
+// DeadlineEditor. Fixed at the call site (TaskCard bumps a celebrating
+// row's z-index above its siblings for the burst's duration) rather
+// than here, so this flag is back on.
+const FIREWORKS_ENABLED = true
 
 // A short celebratory burst covering its positioned parent — used by
 // TaskCard when a task is marked complete, before it actually drops down

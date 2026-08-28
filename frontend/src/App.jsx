@@ -8,6 +8,7 @@ import { ForgotPasswordForm } from '@/components/ForgotPasswordForm'
 import { ResetPasswordForm } from '@/components/ResetPasswordForm'
 import { LandingPage } from '@/components/LandingPage'
 import { NavBar } from '@/components/NavBar'
+import { Logo } from '@/components/Logo'
 import { Dashboard } from '@/components/Dashboard'
 import { TasksPage } from '@/components/TasksPage'
 import { NewTaskPage } from '@/components/NewTaskPage'
@@ -39,9 +40,11 @@ function PublicLayout() {
 function AuthLayout({ children }) {
   return (
     <div className="relative flex min-h-screen items-center justify-center p-8">
-      <span className="absolute top-6 left-8 bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-xl font-bold text-transparent">
-        FlexMaster
-      </span>
+      {/* 'black' (inverse) variant, not the default color/gradient tile —
+          this corner sits directly on PublicLayout's own brand-gradient
+          background one level up, and design-elements.md is explicit
+          that the gradient tile shouldn't go on another gradient. */}
+      <Logo variant="black" scale="secondary" className="absolute top-6 left-8" />
       {children}
       <div className="absolute bottom-0 left-0 flex w-full justify-center gap-6 bg-[#f8f9fa] p-4 text-sm">
         <a href="...">Contact Us</a>

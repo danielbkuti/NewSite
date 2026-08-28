@@ -4,17 +4,9 @@ import { ArrowLeft } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { SignupProgress } from '@/components/SignupProgress'
+import { Logo } from '@/components/Logo'
 import { checkEmailExists, startSignup } from '@/lib/auth'
 import { cn } from '@/lib/utils'
-
-// Same "reflect the page gradient" fill used on the logo elsewhere — kept
-// as one constant so the spots that use it can't drift apart.
-const LOGO_GRADIENT_STYLE = {
-  backgroundImage: 'linear-gradient(to bottom right, #e0c3fc, #7c5fb0, #8ec5fc)',
-  backgroundAttachment: 'fixed',
-  backgroundSize: '100vw 100vh',
-  backgroundPosition: '0 0',
-}
 
 // Step 1 of the multi-step signup flow — just an email. Step 2 (link
 // verification) happens on a different page entirely (/signup/verify/:token,
@@ -82,12 +74,7 @@ export function SignupForm() {
           </button>
 
           <div className="flex flex-col items-center gap-3 pt-2 text-center">
-            <span
-              className="bg-clip-text text-3xl font-bold text-transparent [-webkit-text-fill-color:transparent]"
-              style={LOGO_GRADIENT_STYLE}
-            >
-              FlexMaster
-            </span>
+            <Logo scale="secondary" />
             <h2 className="text-2xl font-bold text-black">Check your email</h2>
             <p className="text-sm text-black/70">
               We&apos;ve sent a verification link to{' '}
@@ -105,12 +92,7 @@ export function SignupForm() {
       <CardContent className="flex flex-col gap-5 pt-6">
         <SignupProgress currentStep="email" />
 
-        <span
-          className="self-center bg-clip-text text-3xl font-bold text-transparent [-webkit-text-fill-color:transparent]"
-          style={LOGO_GRADIENT_STYLE}
-        >
-          FlexMaster
-        </span>
+        <Logo scale="secondary" className="self-center" />
 
         <div className="flex flex-col gap-2">
           <h2 className="text-2xl font-bold text-black">Create your account</h2>

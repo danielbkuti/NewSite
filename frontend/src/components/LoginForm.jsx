@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Logo } from '@/components/Logo'
 import { login } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
@@ -48,23 +49,13 @@ export function LoginForm({ onLoginSuccess }) {
     <Card className="w-full max-w-sm zoom-[1.125] border-transparent bg-[#f8f9fa] text-black shadow-2xl">
       <CardContent className="flex flex-col gap-5 pt-6">
         {/* 1. Small wordmark, top-left — not the main headline anymore */}
-        <span
-          className="self-center bg-clip-text text-3xl font-bold text-transparent [-webkit-text-fill-color:transparent]"
-          style={{
-            backgroundImage: 'linear-gradient(to bottom right, #e0c3fc, #7c5fb0, #8ec5fc)',
-            backgroundAttachment: 'fixed',
-            backgroundSize: '100vw 100vh',
-            backgroundPosition: '0 0',
-          }}
-        >
-          FlexMaster
-        </span>
+        <Logo scale="secondary" className="self-center" />
 
         {/* 2 & 3. Bold left-aligned headline + muted description */}
         <div className="flex flex-col gap-2">
           <h2 className="text-2xl font-bold text-black">Welcome back</h2>
           <p className="text-sm text-black/70">
-            Log in to your FlexMaster account to manage your tasks.
+            Log in to your Fauxcus account to manage your tasks.
           </p>
         </div>
 
@@ -163,7 +154,7 @@ export function LoginForm({ onLoginSuccess }) {
         <div className="flex flex-col gap-1">
           <p className="text-sm font-bold text-black">Stay on top of everything.</p>
           <p className="text-xs text-black/70">
-            FlexMaster keeps your tasks, subtasks, and deadlines in one place — synced the
+            Fauxcus keeps your tasks, subtasks, and deadlines in one place — synced the
             moment you log in.
           </p>
         </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { User, LogOut } from 'lucide-react'
+import { Logo } from '@/components/Logo'
 import { cn } from '@/lib/utils'
 
 const NAV_LINKS = [
@@ -11,21 +12,25 @@ const NAV_LINKS = [
   { to: '/progress', label: 'Progress' },
 ]
 
-const GRADIENT = 'bg-gradient-to-br from-[#e0c3fc] via-[#7c5fb0] to-[#8ec5fc]'
+// Scoped to just this file's two Logo instances — the whole-app default
+// stays 1. Was 0.995 (barely perceptible); trimmed further.
+const NAV_LOGO_SCALE = 0.85
 
 // Fixed top nav for the whole authenticated app. Starts off-white with a
 // faint bottom hairline; past a small scroll threshold it blends into
-// the same pastel gradient used on the login/signup pages, the
-// wordmark swaps from its gradient fill to solid white, and all the
-// nav text/icons go from dark to white with it.
+// the starfield photo (the same one the logo's own lettering uses), the
+// wordmark swaps from its gradient tile to the black/outlined one — with
+// its lettering now switched to the brand gradient, so bar and wordmark
+// aren't both carrying the same photo at once — and all the nav
+// text/icons go from dark to white with it.
 //
 // The background swap is a cross-fade, not a class swap: a browser
-// can't smoothly transition between a flat color and a gradient
+// can't smoothly transition between a flat color and an image
 // (background-image isn't an interpolable property, it just snaps), so
 // instead there are two full-size layers stacked on top of each other
-// — one flat, one gradient — and scrolling fades one out while fading
+// — one flat, one the photo — and scrolling fades one out while fading
 // the other in via opacity, which *is* interpolable. Same trick for the
-// wordmark, which needs to go from gradient-fill text to solid white.
+// wordmark, via Logo's own two crossfading instances.
 export function NavBar({ firstName, onLogout }) {
   const [scrolled, setScrolled] = useState(false)
 
@@ -67,40 +72,48 @@ export function NavBar({ firstName, onLogout }) {
         )}
         aria-hidden="true"
       />
-      {/* Gradient layer — hidden at rest, fades in on scroll. */}
+      {/* Starfield layer — hidden at rest, fades in on scroll. The *wide*
+          export (2400px, starfield-bg-wide.jpg) rather than the small one
+          the logo itself uses — this layer spans the full viewport width,
+          and `background-size: cover` on a 1000px source stretched across
+          a ~1280px+ bar was upscaling it past its native resolution,
+          which read as grainy/soft. Not actually "zoomed in" in the
+          cropping sense (a wide short bar against a roughly-square image
+          barely crops at all), just a too-small source being blown up. */}
       <div
         className={cn(
-          GRADIENT,
-          'absolute inset-0 shadow-sm transition-opacity duration-500 ease-in-out',
+          'absolute inset-0 bg-cover bg-center shadow-sm transition-opacity duration-500 ease-in-out',
           scrolled ? 'opacity-100' : 'opacity-0'
         )}
+        style={{ backgroundImage: 'url(/starfield-bg-wide.jpg)' }}
         aria-hidden="true"
       />
 
       <div className="relative z-10 mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <NavLink to="/home" className="relative inline-block text-xl font-bold tracking-tight">
-          {/* Reserves layout space; the two crossfading spans sit on top
-              of it via absolute inset-0. */}
-          <span className="invisible">FlexMaster</span>
-          <span
+        <NavLink to="/home" className="relative inline-flex" aria-label="Fauxcus home">
+          {/* Rest-state logo (color tile) sits in normal flow, reserving
+              the layout space the scrolled copy then overlays exactly —
+              same crossfade trick as the rest of this file (a browser
+              can't smoothly transition between two different tile
+              backgrounds, so two full copies cross-fade via opacity
+              instead), just built on the shared Logo component now
+              instead of two ad hoc text spans. Both copies get the same
+              `sizeScale` so they stay aligned through the fade. */}
+          <Logo
+            scale="secondary"
+            variant="color"
+            sizeScale={NAV_LOGO_SCALE}
+            className={cn('transition-opacity duration-500 ease-in-out', scrolled ? 'opacity-0' : 'opacity-100')}
+          />
+          <Logo
+            scale="secondary"
+            variant="black"
+            sizeScale={NAV_LOGO_SCALE}
             className={cn(
-              GRADIENT,
-              'absolute inset-0 bg-clip-text text-transparent transition-opacity duration-500 ease-in-out',
-              scrolled ? 'opacity-0' : 'opacity-100'
-            )}
-            aria-hidden="true"
-          >
-            FlexMaster
-          </span>
-          <span
-            className={cn(
-              'absolute inset-0 text-white transition-opacity duration-500 ease-in-out',
+              'absolute inset-0 transition-opacity duration-500 ease-in-out',
               scrolled ? 'opacity-100' : 'opacity-0'
             )}
-            aria-hidden="true"
-          >
-            FlexMaster
-          </span>
+          />
         </NavLink>
 
         <nav className="hidden items-center gap-1 md:flex">
@@ -112,14 +125,19 @@ export function NavBar({ firstName, onLogout }) {
         </nav>
 
         <div className="flex items-center gap-2">
+          {/* Gradient ring only while scrolled — same overlay Logo's
+              black variant uses, `relative` on each button gives it
+              something to position against. Rest state keeps its plain
+              ring/no-ring look; nothing about it needed an outline. */}
           <div
             className={cn(
-              'flex size-8 items-center justify-center rounded-full ring-1 transition-colors duration-500',
+              'relative flex size-8 items-center justify-center rounded-full ring-1 transition-colors duration-500',
               scrolled ? 'bg-white/15 ring-white/30' : 'bg-white/70 ring-black/10'
             )}
             title={firstName || 'Profile'}
             aria-hidden="true"
           >
+            {scrolled && <span aria-hidden="true" className="gradient-ring" />}
             <User className={cn('size-4 transition-colors duration-500', scrolled ? 'text-white' : 'text-black/70')} />
           </div>
           <button
@@ -128,10 +146,11 @@ export function NavBar({ firstName, onLogout }) {
             title="Log out"
             aria-label="Log out"
             className={cn(
-              'flex size-8 items-center justify-center rounded-full transition-colors duration-500',
+              'relative flex size-8 items-center justify-center rounded-full transition-colors duration-500',
               scrolled ? 'bg-white/15 text-white hover:bg-white/25' : 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black'
             )}
           >
+            {scrolled && <span aria-hidden="true" className="gradient-ring" />}
             <LogOut className="size-4" />
           </button>
         </div>
