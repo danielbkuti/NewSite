@@ -1,27 +1,19 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchTasks } from '@/lib/tasks'
+import { useTaskStore } from '@/context/TaskStoreContext'
 import { formatDeadline } from '@/lib/utils'
+import { StatsPanel } from '@/components/StatsPanel'
+import { TaskSearch } from '@/components/TaskSearch'
 
 // The "View all completed" / "View more" destination from the task
 // list's Completed section and the task detail page's completed-
 // subtask group — both cap their inline preview at 3 and point here
-// for the rest. Not a real "progress" feature yet (no charts, no
-// trends) — just the one thing that was promised: everywhere every
-// completed task and subtask actually lives, most recent first.
+// for the rest. Also now the home for the stats viewer (StatsPanel)
+// and a search box, same TaskSearch used on /tasks — reads off the
+// shared store like every other authenticated page instead of its own
+// independent fetch, so it never shows stale numbers relative to a
+// mutation made from the task list or the FAB.
 export function ProgressPage() {
-  // 'loading' | 'ready' | 'error'
-  const [status, setStatus] = useState('loading')
-  const [tasks, setTasks] = useState([])
-
-  useEffect(() => {
-    fetchTasks()
-      .then((data) => {
-        setTasks(data.results)
-        setStatus('ready')
-      })
-      .catch(() => setStatus('error'))
-  }, [])
+  const { tasks, status } = useTaskStore()
 
   if (status === 'loading') {
     return (
@@ -57,9 +49,16 @@ export function ProgressPage() {
   return (
     <div className="mx-auto max-w-3xl px-8 py-8">
       <h1 className="mb-1 text-2xl font-semibold tracking-tight">Progress</h1>
-      <p className="mb-6 text-sm text-muted-foreground">
-        Everything you&apos;ve completed, most recent first.
-      </p>
+      <p className="mb-4 text-sm text-muted-foreground">Stats, habits, and everything you&apos;ve completed.</p>
+      <div className="mb-6">
+        <TaskSearch />
+      </div>
+
+      {tasks.length > 0 && (
+        <div className="mb-8">
+          <StatsPanel tasks={tasks} />
+        </div>
+      )}
 
       {nothingCompleted ? (
         <p className="text-sm text-muted-foreground">
