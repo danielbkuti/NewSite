@@ -26,4 +26,7 @@ dist-ssr
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+*.sw
+
+#Claude Helpers
+HANDOFF.md
