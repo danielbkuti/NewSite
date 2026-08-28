@@ -50,7 +50,10 @@ const ACTIVITY_PAGE_SIZE = 10
 // verbatim; its `flood`/`shadow`/`cta`/`ctaShadow`/`windowFill` follow
 // the same formula the handoff spells out in full for `due-soon` and
 // `completed`, just with the red stops in place of ember/emerald ones.
-const STATE_THEME = {
+// Exported so NewTaskPage can borrow the calm 'far' palette for its own
+// shell — a task being created has no deadline/overdue/completed state
+// yet, so it only ever needs this one entry, not the whole map's logic.
+export const STATE_THEME = {
   far: {
     flood:
       'linear-gradient(152deg,rgba(255,255,255,.94) 0%,rgba(224,195,252,.4) 24%,rgba(255,255,255,0) 62%),' +

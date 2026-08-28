@@ -11,6 +11,9 @@ from user.api_views import (
     check_email_exists,
     password_reset_request_api,
     password_reset_confirm_api,
+    profile_api,
+    change_password_api,
+    delete_account_api,
 )
 
 urlpatterns = [
@@ -33,6 +36,9 @@ urlpatterns = [
         password_reset_confirm_api,
         name="password_reset_confirm_api",
     ),
+    path("api/profile/", profile_api, name="profile_api"),
+    path("api/profile/password/", change_password_api, name="change_password_api"),
+    path("api/profile/delete/", delete_account_api, name="delete_account_api"),
     #path("", include("allauth.urls")),
 
 ]

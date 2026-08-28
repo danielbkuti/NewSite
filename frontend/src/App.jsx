@@ -14,6 +14,7 @@ import { TasksPage } from '@/components/TasksPage'
 import { NewTaskPage } from '@/components/NewTaskPage'
 import { TaskDetailPage } from '@/components/TaskDetailPage'
 import { ProgressPage } from '@/components/ProgressPage'
+import { ProfilePage } from '@/components/ProfilePage'
 import { ComingSoonPage } from '@/components/ComingSoonPage'
 import { Footer } from '@/components/Footer'
 import { AddTaskFab } from '@/components/AddTaskFab'
@@ -64,13 +65,20 @@ function AuthenticatedLayout({ firstName, onLogout }) {
     // Dashboard/TaskList/TaskDetailPage/AddTaskFab all read and write
     // through, instead of each independently fetching its own copy.
     <TaskStoreProvider>
-      <div className="min-h-screen bg-background">
+      <div className="flex min-h-screen flex-col bg-background">
         <NavBar firstName={firstName} onLogout={onLogout} />
         {/* NavBar is fixed, and taller on narrow screens (it grows a second
             link row below md) — pt-28 clears that worst case, pt-16 clears
-            the single-row desktop height (h-16) from md up. */}
-        <div className="pt-28 md:pt-16">
-          <Outlet />
+            the single-row desktop height (h-16) from md up. flex-1 here
+            (plus flex-col on the root above) is what pins Footer to the
+            viewport bottom on short pages (e.g. the new-task form) instead
+            of it trailing off right under the content with a gap of bare
+            background below — same sticky-footer pattern as any page with
+            variable content height. */}
+        <div className="flex flex-1 flex-col pt-28 md:pt-16">
+          <div className="flex-1">
+            <Outlet />
+          </div>
           <Footer />
         </div>
         <AddTaskFab />
@@ -220,6 +228,7 @@ function App() {
         <Route path="/goals" element={<ComingSoonPage title="Goals" />} />
         <Route path="/calendar" element={<ComingSoonPage title="Calendar" />} />
         <Route path="/progress" element={<ProgressPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
       </Route>
 
       {/* Unmatched paths land on the real homepage (or the dashboard, if

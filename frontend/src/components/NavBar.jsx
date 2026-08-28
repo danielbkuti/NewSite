@@ -128,18 +128,21 @@ export function NavBar({ firstName, onLogout }) {
           {/* Gradient ring only while scrolled — same overlay Logo's
               black variant uses, `relative` on each button gives it
               something to position against. Rest state keeps its plain
-              ring/no-ring look; nothing about it needed an outline. */}
-          <div
+              ring/no-ring look; nothing about it needed an outline.
+              Was purely decorative (see HANDOFF.md's "Known gaps") —
+              now links to the profile page. */}
+          <NavLink
+            to="/profile"
             className={cn(
               'relative flex size-8 items-center justify-center rounded-full ring-1 transition-colors duration-500',
-              scrolled ? 'bg-white/15 ring-white/30' : 'bg-white/70 ring-black/10'
+              scrolled ? 'bg-white/15 ring-white/30 hover:bg-white/25' : 'bg-white/70 ring-black/10 hover:bg-white'
             )}
-            title={firstName || 'Profile'}
-            aria-hidden="true"
+            title={firstName ? `${firstName}'s profile` : 'Profile'}
+            aria-label="Profile"
           >
             {scrolled && <span aria-hidden="true" className="gradient-ring" />}
             <User className={cn('size-4 transition-colors duration-500', scrolled ? 'text-white' : 'text-black/70')} />
-          </div>
+          </NavLink>
           <button
             type="button"
             onClick={onLogout}

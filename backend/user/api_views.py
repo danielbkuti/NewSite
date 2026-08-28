@@ -2,7 +2,7 @@ import json
 from datetime import timedelta
 
 from django.conf import settings
-from django.contrib.auth import get_user_model, login, logout
+from django.contrib.auth import get_user_model, login, logout, update_session_auth_hash
 from django.contrib.auth.tokens import default_token_generator
 from django.http import JsonResponse
 from django.utils import timezone
@@ -17,6 +17,9 @@ from .forms import (
     SignupCompleteForm,
     PasswordResetRequestForm,
     PasswordResetConfirmForm,
+    ProfileUpdateForm,
+    ChangePasswordForm,
+    DeleteAccountForm,
 )
 from .models import PendingSignup, generate_signup_token
 from .ratelimit import is_rate_limited, record_attempt, reset_rate_limit
@@ -397,3 +400,109 @@ def password_reset_confirm_api(request, uidb64, token):
         "username": user.username,
         "first_name": user.first_name,
     })
+
+
+def _serialize_profile(user):
+    return {
+        "username": user.username,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "email": user.email,
+        "date_of_birth": user.date_of_birth.isoformat() if user.date_of_birth else None,
+        "date_joined": user.date_joined.isoformat(),
+    }
+
+
+@require_http_methods(["GET", "PATCH"])
+def profile_api(request):
+    """
+    The profile page's own read/write endpoint — GET for the initial
+    load, PATCH for saving the "Personal info" section (name, username,
+    date of birth). Session-cookie auth like every other view in this
+    file, so an anonymous request just gets a plain 401 rather than
+    Django's default login-page redirect (there's no HTML page here to
+    redirect to).
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({"detail": "Authentication required."}, status=401)
+
+    if request.method == "GET":
+        return JsonResponse(_serialize_profile(request.user))
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "Invalid JSON body."}, status=400)
+
+    form = ProfileUpdateForm(data, user=request.user)
+    if not form.is_valid():
+        return JsonResponse({"success": False, "errors": form.errors.get_json_data()}, status=400)
+
+    user = request.user
+    user.first_name = form.cleaned_data["first_name"]
+    user.last_name = form.cleaned_data["last_name"]
+    user.username = form.cleaned_data["username"]
+    user.date_of_birth = form.cleaned_data["date_of_birth"]
+    user.save(update_fields=["first_name", "last_name", "username", "date_of_birth"])
+
+    return JsonResponse({"success": True, **_serialize_profile(user)})
+
+
+@require_http_methods(["POST"])
+def change_password_api(request):
+    """
+    Profile page's "Change password" section. Requires the current
+    password (unlike the emailed reset-link flow, which proves identity
+    a different way) plus Django's own strength validation on the new
+    one.
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({"detail": "Authentication required."}, status=401)
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "Invalid JSON body."}, status=400)
+
+    form = ChangePasswordForm(data, user=request.user)
+    if not form.is_valid():
+        return JsonResponse({"success": False, "errors": form.errors.get_json_data()}, status=400)
+
+    user = request.user
+    user.set_password(form.cleaned_data["password1"])
+    user.save(update_fields=["password"])
+    # set_password() rotates the hash Django's session middleware checks
+    # on every request — without this, changing your own password would
+    # silently log you out on the very next request.
+    update_session_auth_hash(request, user)
+
+    return JsonResponse({"success": True})
+
+
+@require_http_methods(["POST"])
+def delete_account_api(request):
+    """
+    Profile page's "Danger zone" — a real, irreversible account
+    deletion, gated on re-entering the password as one more
+    confirmation beyond the frontend's own "are you sure" prompt.
+    Cascades to the user's tasks via Task.user's FK (see
+    backend/tasks/models.py), same as deleting the user any other way
+    would.
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({"detail": "Authentication required."}, status=401)
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "Invalid JSON body."}, status=400)
+
+    form = DeleteAccountForm(data, user=request.user)
+    if not form.is_valid():
+        return JsonResponse({"success": False, "errors": form.errors.get_json_data()}, status=400)
+
+    user = request.user
+    logout(request)
+    user.delete()
+
+    return JsonResponse({"success": True})

@@ -1,16 +1,21 @@
 import { useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { ArrowLeft, Pencil } from 'lucide-react'
 import { DeadlineEditor } from '@/components/DeadlineEditor'
 import { createTask } from '@/lib/tasks'
 import { useTaskStore } from '@/context/TaskStoreContext'
 import { formatDeadline } from '@/lib/utils'
+import { STATE_THEME } from '@/components/TaskDetailPage'
 
-// The dedicated task-creation page — previously "adding a task" only
-// meant the FAB's one-field quick form (name only, no description or
-// deadline at creation time). Reached from the "Add a new task" option
-// in the add menu, from every context that offers it.
+// Remodeled to match TaskDetailPage's own shell/chrome (rounded flood
+// card, gradient ring, 246px left rail + content column) rather than
+// the plain form it used to be — a task doesn't exist yet at this
+// point, so it always wears the calm 'far' palette (no deadline to be
+// overdue/urgent against, nothing to mark complete). Deliberately
+// leaves out what only makes sense for a task that already exists:
+// the progress dial, the mark-complete pill, and the activity spine.
+const theme = STATE_THEME.far
+
 export function NewTaskPage() {
   const navigate = useNavigate()
   const { mergeTask } = useTaskStore()
@@ -54,80 +59,133 @@ export function NewTaskPage() {
   }
 
   return (
-    <div className="mx-auto max-w-xl px-8 py-8">
-      <Link
-        to="/tasks"
-        className="mb-4 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
-        Back to tasks
-      </Link>
+    <div className="mx-auto max-w-5xl px-6 py-8">
+      <form onSubmit={handleSubmit}>
+        <div className="relative overflow-hidden rounded-[30px]" style={{ background: theme.flood, boxShadow: theme.shadow }}>
+          <span aria-hidden="true" className="task-detail-ring" style={{ '--task-accent': theme.border }} />
 
-      <h1 className="text-2xl font-bold tracking-tight">New task</h1>
-
-      <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-5">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="task-name" className="text-xs font-medium text-muted-foreground">
-            Name
-          </label>
-          <input
-            id="task-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Task name…"
-            autoFocus
-            required
-            className="rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="task-description" className="text-xs font-medium text-muted-foreground">
-            Description <span className="font-normal">(optional)</span>
-          </label>
-          <textarea
-            id="task-description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={4}
-            placeholder="What's this task about?"
-            className="rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground">Deadline (optional)</span>
-          <div ref={deadlineAnchorRef} className="relative w-fit">
-            <button
-              type="button"
-              onClick={() => setEditingDeadline(true)}
-              className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+          <div className="relative z-[2] grid grid-cols-[246px_1fr] items-start">
+            {/* ---------------------------------------------------- Left rail */}
+            <div
+              className="flex flex-col gap-5 self-stretch border-r px-5 py-[22px]"
+              style={{
+                background: 'linear-gradient(180deg,rgba(255,255,255,.82),rgba(255,255,255,.5))',
+                borderColor: theme.hairline,
+              }}
             >
-              {dateDeadline ? `Due ${formatDeadline(dateDeadline)}` : 'Set deadline'}
-            </button>
-            {editingDeadline && (
-              <DeadlineEditor
-                anchorRef={deadlineAnchorRef}
-                value={dateDeadline}
-                onSave={handlePickDeadline}
-                onCancel={() => setEditingDeadline(false)}
-                minDayOffset={0}
-              />
-            )}
+              <Link to="/tasks" className="inline-flex items-center gap-1 text-xs font-bold" style={{ color: theme.strong }}>
+                <ArrowLeft className="size-3.5" />
+                Back to tasks
+              </Link>
+
+              <div ref={deadlineAnchorRef} className="relative">
+                <p className="text-[10px] font-black tracking-[.12em] uppercase" style={{ color: theme.strong }}>
+                  Deadline
+                </p>
+                {editingDeadline && (
+                  <DeadlineEditor
+                    anchorRef={deadlineAnchorRef}
+                    value={dateDeadline}
+                    onSave={handlePickDeadline}
+                    onCancel={() => setEditingDeadline(false)}
+                    minDayOffset={0}
+                  />
+                )}
+                {!editingDeadline && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingDeadline(true)}
+                    className="group mt-1 flex w-full items-center justify-between rounded-xl border bg-white px-3 py-2 text-left"
+                    style={{ borderColor: theme.hairline }}
+                  >
+                    <span className="text-[13px] font-black" style={{ color: theme.title }}>
+                      {dateDeadline ? formatDeadline(dateDeadline) : 'Set deadline (optional)'}
+                    </span>
+                    <Pencil className="size-3.5 shrink-0" style={{ color: theme.strong }} aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-auto flex flex-col gap-2 pt-2">
+                {error && <p className="text-[11px] text-destructive">{error}</p>}
+                <button
+                  type="submit"
+                  disabled={submitting || !name.trim()}
+                  className="w-full rounded-full px-[18px] py-[11px] text-[13.5px] font-black text-white disabled:opacity-60"
+                  style={{ background: theme.cta, boxShadow: theme.ctaShadow }}
+                >
+                  {submitting ? 'Creating…' : 'Create task'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(-1)}
+                  disabled={submitting}
+                  className="w-full rounded-full px-4 py-2 text-xs font-bold text-muted-foreground transition-colors hover:bg-black/5"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+
+            {/* ------------------------------------------------ Content column */}
+            <div className="flex min-w-0 flex-col gap-5 px-6 pt-[22px] pb-6">
+              <div className="flex flex-col gap-1.5">
+                <div
+                  className="overflow-hidden rounded-[16px] p-[3px] shadow-[0_10px_26px_-22px_rgba(0,0,0,.35)]"
+                  style={{ background: theme.border }}
+                >
+                  <div className="rounded-[13px] bg-white/94 px-3 py-1">
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Task name…"
+                      autoFocus
+                      required
+                      className="w-full bg-transparent text-[27px] leading-[1.18] font-black tracking-[-0.025em] outline-none placeholder:text-black/25"
+                      style={{ color: theme.title }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <section className="flex flex-col gap-3">
+                <SectionHeader label="Description" hairline={theme.hairline} strong={theme.strong} />
+                <div
+                  className="overflow-hidden rounded-[18px] p-[3px] shadow-[0_10px_26px_-22px_rgba(0,0,0,.35)]"
+                  style={{ background: theme.border }}
+                >
+                  <div className="rounded-[15px] bg-white/94 px-[18px] py-4">
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={5}
+                      placeholder="Add some context so this task still makes sense next week."
+                      className="w-full max-w-[62ch] resize-y bg-transparent text-[14.5px] leading-[1.72] outline-none placeholder:text-muted-foreground"
+                      style={{ color: 'oklch(0.28 0 0)' }}
+                    />
+                  </div>
+                </div>
+              </section>
+            </div>
           </div>
         </div>
-
-        {error && <p className="text-xs text-destructive">{error}</p>}
-
-        <div className="flex items-center gap-2">
-          <Button type="submit" disabled={submitting}>
-            {submitting ? 'Creating…' : 'Create task'}
-          </Button>
-          <Button type="button" variant="ghost" onClick={() => navigate(-1)} disabled={submitting}>
-            Cancel
-          </Button>
-        </div>
       </form>
+    </div>
+  )
+}
+
+// Same as TaskDetailPage's own SectionHeader — duplicated rather than
+// imported since that one isn't exported (it's a small, page-scoped
+// building block there); keeping this page's copy in sync with the
+// detail page's if that one's style ever changes is a reasonable ask,
+// but not worth a shared-component extraction for four lines of markup.
+function SectionHeader({ label, hairline, strong }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <h2 className="text-[11px] font-black tracking-[.12em] uppercase" style={{ color: strong }}>
+        {label}
+      </h2>
+      <span className="h-px flex-1" style={{ background: `linear-gradient(90deg,${hairline},rgba(255,255,255,0))` }} />
     </div>
   )
 }

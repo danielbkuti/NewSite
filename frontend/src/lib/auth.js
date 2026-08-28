@@ -69,3 +69,35 @@ export function confirmPasswordReset(uidb64, token, { password1, password2 }) {
     body: { password1, password2 },
   })
 }
+
+// --- Profile page ---
+
+export function fetchProfile() {
+  return apiFetch('/user/api/profile/')
+}
+
+export function updateProfile({ firstName, lastName, username, dateOfBirth }) {
+  return apiFetch('/user/api/profile/', {
+    method: 'PATCH',
+    body: {
+      first_name: firstName,
+      last_name: lastName,
+      username,
+      date_of_birth: dateOfBirth,
+    },
+  })
+}
+
+export function changePassword({ currentPassword, password1, password2 }) {
+  return apiFetch('/user/api/profile/password/', {
+    method: 'POST',
+    body: { current_password: currentPassword, password1, password2 },
+  })
+}
+
+export function deleteAccount(password) {
+  return apiFetch('/user/api/profile/delete/', {
+    method: 'POST',
+    body: { password },
+  })
+}

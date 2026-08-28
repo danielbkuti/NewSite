@@ -15,6 +15,10 @@ class CustomUser(AbstractUser):
 
     email = models.EmailField(unique=True)
     is_active = models.BooleanField(default=False)
+    # Optional — added for the profile page. Nothing in signup collects
+    # this yet, so every existing account has it unset until someone
+    # fills it in from their own profile.
+    date_of_birth = models.DateField(null=True, blank=True)
 
     def __str__(self):
         return self.username

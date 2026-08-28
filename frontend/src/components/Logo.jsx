@@ -39,44 +39,58 @@ import { cn } from '@/lib/utils'
 // wanted later) plus the icon scale for anywhere too small for the photo
 // to read as anything but noise — literal pixel values from §3, not a
 // fluid/interpolated scale.
+// Padding, outlineStroke, and lip below are per logo-outline-handoff.md
+// (white outline traced around the letterforms, a white "lip" along the
+// notch's top/left edge, and a shorter/wider tile so the notch keeps
+// room for the check to read) — the rest of each scale is unchanged
+// from before that pass.
 const SCALES = {
   primary: {
     fontSize: 74,
     tracking: '-0.05em',
     tileRadius: 34,
-    padding: '34px 46px 34px 40px',
+    padding: '24px 50px 24px 44px',
     notch: 44,
     checkSize: 26,
     checkStroke: 3.4,
     starfield: true,
+    outlineStroke: 3.5,
+    lip: 2,
   },
   secondary: {
     fontSize: 32,
     tracking: '-0.04em',
     tileRadius: 16,
-    padding: '14px 22px 14px 18px',
+    padding: '10px 25px 10px 21px',
     notch: 20,
     checkSize: 12,
     checkStroke: 4.2,
     starfield: true,
+    outlineStroke: 1.6,
+    lip: 1.5,
   },
   // Below 30px type the photo has no room to read as stars — it's just
   // texture noise — so this scale drops it for a plain solid fill
   // instead, per design-elements.md's own "don't apply the starfield
   // below 30px type" rule. Padding is scaled down from secondary's own
-  // ratios (no icon-scale padding is given in the spec).
+  // ratios (no icon-scale padding is given in the spec). The white
+  // outline still applies here — it's what keeps the mark legible at
+  // 17px, per logo-outline-handoff.md.
   icon: {
     fontSize: 17,
     tracking: '-0.04em',
     tileRadius: 8.5,
-    padding: '7px 12px 7px 10px',
+    padding: '5px 14px 5px 12px',
     notch: 12,
     checkSize: 8,
     checkStroke: 5.5,
     starfield: false,
+    outlineStroke: 0.9,
+    lip: 1,
   },
 }
 
+const OUTLINE_COLOR = '#ffffff'
 const BRAND_GRADIENT = 'linear-gradient(to bottom right, #e0c3fc, #7c5fb0, #8ec5fc)'
 const STARFIELD_IMAGE = 'url(/starfield-bg.jpg) center/cover'
 // Lucide's own "check" glyph path, in its native 24×24 viewBox —
@@ -193,6 +207,17 @@ export function Logo({ variant = 'color', scale = 'secondary', sizeScale = 1, cl
           letterSpacing: s.tracking,
           whiteSpace: 'nowrap',
           ...letterStyle,
+          // Traced around the letterforms so the fill (starfield/gradient/
+          // solid ink, whichever letterStyle picked above) separates from
+          // the tile behind it — see logo-outline-handoff.md. `paintOrder:
+          // 'stroke fill'` is load-bearing: Chrome honours paint-order on
+          // HTML text and paints the stroke *under* the glyph so only its
+          // outer half shows, avoiding the pinch a second stroked copy of
+          // the word produced at the tight bend of the "s". Not clipped by
+          // background-clip: text, so it survives on the transparent-fill
+          // spans too.
+          WebkitTextStroke: `${s.outlineStroke}px ${OUTLINE_COLOR}`,
+          paintOrder: 'stroke fill',
         }}
       >
         Fauxcus
@@ -201,6 +226,24 @@ export function Logo({ variant = 'color', scale = 'secondary', sizeScale = 1, cl
           tree, copy/paste, find-in-page) — the span above is aria-hidden
           since its "text" is really an image fill. */}
       <span className="sr-only">Fauxcus</span>
+
+      {/* The notch "lip" — a white edge along its top and left, so the
+          notch reads as a cut rather than a smudge where the two dark
+          fills meet. Two plain bars, siblings of the notch and rendered
+          before it in the tree so the notch's own check cutout still
+          reveals the tile underneath, not these bars. Can't be a border/
+          box-shadow on the notch itself — the notch is masked, and the
+          mask would clip those too. */}
+      <span
+        aria-hidden="true"
+        className="absolute right-0"
+        style={{ bottom: s.notch, width: s.notch + s.lip, height: s.lip, background: OUTLINE_COLOR }}
+      />
+      <span
+        aria-hidden="true"
+        className="absolute bottom-0"
+        style={{ right: s.notch, width: s.lip, height: s.notch, background: OUTLINE_COLOR }}
+      />
 
       <span
         aria-hidden="true"

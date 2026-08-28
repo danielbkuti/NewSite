@@ -16,6 +16,11 @@ mid-session, or the branch not being `main`, isn't necessarily a sign
 something's wrong. Read the current state before assuming anything's
 broken, and treat this file as a snapshot, not a live view.
 
+## Response style
+User wants short replies. No filler words ("the", "is", "am", "are").
+3-6 word sentences. Direct answers only. Run tools first, show result,
+then stop — no narration.
+
 ## Git state right now
 `main` is still at **`847f84f`** in the shared checkout — this session's
 work is **not merged into `main` yet**. Everything it did lives on branch
