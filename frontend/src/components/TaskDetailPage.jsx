@@ -870,7 +870,7 @@ export function TaskDetailPage() {
 
               <div ref={subtaskSectionRef}>
                 {addingSubtask ? (
-                  <AddSubtaskForm onAdd={handleAddSubtask} onCancel={() => setAddingSubtask(false)} />
+                  <AddSubtaskForm onAdd={handleAddSubtask} onCancel={() => setAddingSubtask(false)} theme={theme} />
                 ) : !hasSubtasks ? (
                   <p className="text-sm text-muted-foreground">
                     Want to break this down into smaller chunks?{' '}
@@ -1347,12 +1347,14 @@ function DetailSubtaskRow({ index, subtask, checked, confetti, busy, theme, onTo
     badgeStyle = { background: STATE_THEME['due-soon'].soft, color: STATE_THEME['due-soon'].strong }
   } else if (subtask.dateDeadline) {
     badgeContent = `Due ${formatDeadline(subtask.dateDeadline)}`
-    badgeClassName = 'rounded-full bg-[#fffbeb] px-2 py-0.5 text-[11px] font-black text-[#b45309] tabular-nums transition-colors hover:bg-[#fef3c7]'
+    badgeClassName = 'rounded-full bg-[#f3e8ff] px-2 py-0.5 text-[11px] font-black text-[#6b46a8] tabular-nums transition-colors hover:bg-[#e9d5ff]'
   } else {
-    // No deadline yet, same amber pill every other "set a deadline"
-    // trigger in the app already uses (AddSubtaskForm's own included).
+    // No deadline yet — soft purple, same pair as every other "set a
+    // deadline" trigger in the app now uses (AddSubtaskForm's own
+    // included, and the list view's own equivalent on TaskCard) —
+    // used to be amber here, same as those, before this pass.
     badgeContent = 'Set deadline'
-    badgeClassName = 'rounded-full bg-[#fffbeb] px-2 py-0.5 text-[11px] font-black text-[#b45309] transition-colors hover:bg-[#fef3c7]'
+    badgeClassName = 'rounded-full bg-[#f3e8ff] px-2 py-0.5 text-[11px] font-black text-[#6b46a8] transition-colors hover:bg-[#e9d5ff]'
   }
 
   const badge = checked ? (

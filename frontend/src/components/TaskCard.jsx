@@ -425,7 +425,12 @@ export function SubtaskStackCard({
                     ? CHIP_CLASS.done
                     : effectiveState === 'urgent'
                       ? CHIP_CLASS.urgent
-                      : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                      : // Soft purple, not amber — this is the app's
+                        // generic "calm, nothing urgent" pill colour
+                        // (same pair as TaskDetailPage's STATE_THEME.far)
+                        // now that subtask deadline chips no longer use
+                        // amber for it.
+                        'bg-[#f3e8ff] text-[#6b46a8] hover:bg-[#e9d5ff]'
             )}
           >
             {effectiveState === 'done' && checked
@@ -443,6 +448,30 @@ export function SubtaskStackCard({
               onSave={handleDeadlineSave}
               onCancel={closeDeadlineEditor}
             />
+          )}
+        </div>
+      ) : !checked ? (
+        // Previously nowhere on this page — a subtask with no deadline
+        // yet had no "set one" control at all in the list view (only
+        // ever settable from the add-subtask form at creation time, or
+        // from the task detail page). Same soft-purple pill/portal-
+        // popover pattern as the has-a-deadline case above. Hidden once
+        // `checked`, same as a completed subtask never having had one
+        // just shows nothing here — editing a finished subtask's
+        // deadline isn't a control that exists anywhere else either.
+        <div ref={dueChipAnchorRef} className="relative shrink-0">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleDeadlineEditor()
+            }}
+            className="relative rounded-full bg-[#f3e8ff] px-2 py-0.5 text-[11px] font-medium text-[#6b46a8] transition-colors hover:bg-[#e9d5ff]"
+          >
+            Set deadline
+          </button>
+          {editingDeadline && (
+            <DeadlineEditor anchorRef={dueChipAnchorRef} value={null} onSave={handleDeadlineSave} onCancel={closeDeadlineEditor} />
           )}
         </div>
       ) : null}
@@ -1027,10 +1056,12 @@ export function TaskCard({
             // detail page, just given a light-tint/dark-text pairing of
             // that hue (this app has no pre-made soft/strong pair for
             // blue the way it does for purple's `#f3e8ff`/`#6b46a8`).
-            // Amber stays everywhere else (subtask due-chips,
-            // AddSubtaskForm, NewTaskPage): this is the one badge always
-            // sitting on top of this exact state, so it's the one place
-            // amber actually clashed rather than just being neutral.
+            // `NewTaskPage` still keeps amber (this is the one badge
+            // always sitting on top of this exact state, so it's the one
+            // place amber actually clashed rather than just being
+            // neutral) — but subtask due-chips and `AddSubtaskForm` have
+            // since moved off amber too, onto that same soft-purple pair,
+            // in a later pass.
             <span className="relative inline-flex">
               <button
                 type="button"
@@ -1176,7 +1207,20 @@ export function TaskCard({
                   style={{
                     top: `${i * pitch}px`,
                     height: `${rowHeight}px`,
-                    zIndex: rows.length - i,
+                    // Every row's own `transform` (even the inert `scale(1)`
+                    // expanded case) opens a fresh stacking context — the
+                    // same class of bug DeadlineEditor used to hit before
+                    // its portal rewrite. That's what was actually making
+                    // ConfettiBurst here look "broken": a burst on a row
+                    // with a lower resting z-index than its neighbors was
+                    // rendered *inside* that row's own context, so it
+                    // painted entirely behind whichever row was stacked in
+                    // front of it — sparks flying "up" would vanish the
+                    // moment they crossed under the card above. A
+                    // celebrating row now gets bumped above every sibling
+                    // for the duration of its burst, so it can't be hidden
+                    // behind one regardless of stack position.
+                    zIndex: celebratingSubtaskIds.has(subtask.id) ? rows.length + 1 : rows.length - i,
                     opacity: expanded ? 1 : 1 - i * 0.3,
                     transform: expanded ? 'scale(1)' : `scale(${1 - i * 0.03})`,
                   }}

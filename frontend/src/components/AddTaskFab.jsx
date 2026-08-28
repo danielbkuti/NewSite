@@ -1,14 +1,27 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, X, SquarePlus, Target, CalendarDays, ListPlus, CalendarClock, FileText } from 'lucide-react'
+import { X, SquarePlus, Target, CalendarDays, ListPlus, CalendarClock, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { updateTask } from '@/lib/tasks'
 import { useTaskStore } from '@/context/TaskStoreContext'
 import { cn } from '@/lib/utils'
 
+const TASK_DETAIL_PATH = /^\/tasks\/(\d+)$/
+
 const GRADIENT = 'bg-gradient-to-br from-[#e0c3fc] via-[#7c5fb0] to-[#8ec5fc]'
 
-const TASK_DETAIL_PATH = /^\/tasks\/(\d+)$/
+// Press-transition tokens — see fab-motion-handoff.md. One 420ms beat
+// drives four synchronised changes (glyph rotation, glyph stroke
+// crossfade, field crossfade, ring draw), all sharing this exact
+// duration/easing so nothing reads as staggered. `fabTransition` itself
+// is built per-render, inside the component (its duration depends on
+// prefers-reduced-motion).
+const FAB_DUR = 420
+const FAB_EASE = 'cubic-bezier(.34,1.16,.34,1)'
+// 2π × 26.75, the ring's own radius (below) — dasharray/circumference
+// must be recomputed together if the FAB's size ever changes.
+const FAB_RING_CIRCUMFERENCE = 168
+const PLUS_PATH = 'M12 5v14M5 12h14'
 
 // Same per-concept colors as the home dashboard's own three cards
 // (Dashboard.jsx's ActionCard accents) — task/goal/calendar options
@@ -97,6 +110,15 @@ function ActionCard({ children, as: Tag = 'div', ...props }) {
 // changed.
 export function AddTaskFab() {
   const [open, setOpen] = useState(false)
+  // Reduced motion drops the whole press-transition's duration to 0 —
+  // per fab-motion-handoff.md's own suggested shortcut, rather than
+  // special-casing the rotation and ring separately. At 0ms, `rotate`
+  // still jumps straight to 360deg, but that's indistinguishable from
+  // 0deg (a plus is radially symmetric) and the dash-offset snaps
+  // instead of drawing — no perceivable motion either way, while the
+  // color crossfades still happen (just instantly, not animated).
+  const fabDur = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : FAB_DUR
+  const fabTransition = (prop) => `${prop} ${fabDur}ms ${FAB_EASE}`
   // null | 'description' — the only option left that still expands
   // in place rather than navigating.
   const [activeAction, setActiveAction] = useState(null)
@@ -251,33 +273,135 @@ export function AddTaskFab() {
       )}
 
       <div className="fixed right-6 bottom-6 z-[101]">
-        {/* Radial glow, active only while the menu's open — visually
-            ties the button to the cards floating above it. */}
+        {/* Radial glow — always mounted (with its pulse animation always
+            running) rather than conditionally rendered, so its opacity
+            can crossfade on the same 420ms beat as everything else
+            instead of just snapping in/out with the rest of the style
+            object. */}
         <span
           aria-hidden="true"
           className="pointer-events-none absolute -inset-3 rounded-full"
-          style={
-            open
-              ? {
-                  background:
-                    'radial-gradient(circle, rgba(224,195,252,0.6), rgba(124,95,176,0.35) 45%, transparent 75%)',
-                  filter: 'blur(6px)',
-                  animation: 'fab-glow-pulse 1.8s ease-in-out infinite',
-                }
-              : undefined
-          }
+          style={{
+            background: 'radial-gradient(circle, rgba(224,195,252,0.6), rgba(124,95,176,0.35) 45%, transparent 75%)',
+            filter: 'blur(6px)',
+            animation: 'fab-glow-pulse 1.8s ease-in-out infinite',
+            opacity: open ? 1 : 0,
+            transition: fabTransition('opacity'),
+          }}
         />
+
+        {/* Gradient defs, rendered once alongside the button — see
+            fab-motion-handoff.md's "two SVG gotchas". A gradient paint
+            server is dropped on any element whose bounding box is zero
+            in one dimension, which either straight-line stroke of a
+            plus is on its own — that's why the glyph below is one
+            combined `<path>` ("M12 5v14M5 12h14") rather than two
+            separate ones, since the union of both strokes' bounding
+            boxes is a proper non-degenerate square. `fabGrad` still
+            specifies `userSpaceOnUse` (coordinates in the glyph's own
+            24×24 viewBox) on top of that, rather than relying on the
+            now-fixed bbox — belt and suspenders. `ringGrad` stays on
+            the default objectBoundingBox — a circle's bbox is never
+            degenerate. */}
+        <svg width="0" height="0" aria-hidden="true" className="absolute">
+          <defs>
+            <linearGradient id="fabGrad" gradientUnits="userSpaceOnUse" x1="4" y1="4" x2="20" y2="20">
+              <stop offset="0%" stopColor="#e0c3fc" />
+              <stop offset="50%" stopColor="#7c5fb0" />
+              <stop offset="100%" stopColor="#8ec5fc" />
+            </linearGradient>
+            <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#e0c3fc" />
+              <stop offset="50%" stopColor="#7c5fb0" />
+              <stop offset="100%" stopColor="#8ec5fc" />
+            </linearGradient>
+          </defs>
+        </svg>
+
         <button
           type="button"
-          onClick={() => (open ? closeMenu() : setOpen(true))}
+          onClick={() => {
+            if (open) closeMenu()
+            else setOpen(true)
+          }}
           aria-label="Add"
+          aria-expanded={open}
           title="Add"
-          className={cn(
-            GRADIENT,
-            'relative flex size-14 items-center justify-center rounded-full text-white shadow-lg transition-transform hover:scale-105'
-          )}
+          // Hover scale stays a plain Tailwind `hover:scale-105`, but
+          // off the general `transition-transform` utility — that
+          // shares its duration with nothing else here, and 420ms would
+          // make hovering feel sluggish. Its own short inline transition
+          // instead; doesn't conflict with the glyph's 420ms rotation
+          // since that's a transform on a different element.
+          className="relative grid size-14 place-items-center overflow-hidden rounded-full fab-starfield shadow-lg hover:scale-105"
+          style={{ transition: 'transform 150ms ease-out' }}
         >
-          <Plus className="size-6" />
+          {/* 1. Gradient field — the closed-state look. `fab-starfield`
+              (index.css) is the base layer underneath, always present;
+              this crossfades out on open to reveal it, since a
+              background-image change can't itself be transitioned. */}
+          <span
+            aria-hidden="true"
+            className={cn(GRADIENT, 'absolute inset-0 rounded-full')}
+            style={{ opacity: open ? 0 : 1, transition: fabTransition('opacity') }}
+          />
+
+          {/* 2. Gradient ring — draws clockwise from 12 o'clock as the
+              button opens, via stroke-dashoffset (168 → 0); the `-90deg`
+              rotation is what moves its start point from 3 o'clock,
+              where stroke-dasharray circles start by default, to 12. */}
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 56 56"
+            className="pointer-events-none absolute inset-0 -rotate-90"
+            fill="none"
+          >
+            <circle
+              cx="28"
+              cy="28"
+              r="26.75"
+              stroke="url(#ringGrad)"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeDasharray={FAB_RING_CIRCUMFERENCE}
+              strokeDashoffset={open ? 0 : FAB_RING_CIRCUMFERENCE}
+              style={{ transition: fabTransition('stroke-dashoffset') }}
+            />
+          </svg>
+
+          {/* 3. The glyph itself — one wrapper carries the rotation so
+              both stacked strokes turn together; each stroke crossfades
+              independently (a `stroke` color change can't transition
+              any more than a background-image can), white fading out as
+              the gradient one fades in. */}
+          <span
+            aria-hidden="true"
+            className="relative block size-6"
+            style={{ transform: `rotate(${open ? 360 : 0}deg)`, transition: fabTransition('transform') }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="absolute inset-0 size-6"
+              fill="none"
+              stroke="#ffffff"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              style={{ opacity: open ? 0 : 1, transition: fabTransition('opacity') }}
+            >
+              <path d={PLUS_PATH} />
+            </svg>
+            <svg
+              viewBox="0 0 24 24"
+              className="absolute inset-0 size-6"
+              fill="none"
+              stroke="url(#fabGrad)"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              style={{ opacity: open ? 1 : 0, transition: fabTransition('opacity') }}
+            >
+              <path d={PLUS_PATH} />
+            </svg>
+          </span>
         </button>
       </div>
     </>

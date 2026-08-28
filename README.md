@@ -1,11 +1,11 @@
-# FlexMaster — Task Management Backend (Django + DRF + Docker)
+# Fauxcus — Task Management Backend (Django + DRF + Docker)
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![Django](https://img.shields.io/badge/Django-4.x-green)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-blue)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-blue)
 ## Overview
 
-FlexMaster is a containerized Django task management backend featuring a REST API built with Django REST Framework.  
+Fauxcus is a containerized Django task management backend featuring a REST API built with Django REST Framework.  
 The system supports user authentication, task and subtask management, email activation, and relational task completion propagation.
 
 This project demonstrates backend engineering practices including:

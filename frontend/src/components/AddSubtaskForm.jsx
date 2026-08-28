@@ -15,14 +15,22 @@ import { formatDeadline } from '@/lib/utils'
 // second one in here.
 //
 // The deadline picker sits right under the name field, same
-// "yellow pill trigger toggles a floating DeadlineEditor" pattern as
-// everywhere else a deadline gets set — but same as `NewTaskPage`
-// (also creating something that doesn't exist yet), it just holds the
-// picked value in local form state rather than saving immediately;
-// there's no subtask to PATCH until Add actually creates one. `onAdd`
-// is called with both `name` and `dateDeadline` (`null` if never set)
-// so callers can include it in the create request.
-export function AddSubtaskForm({ onAdd, onCancel }) {
+// "soft-purple pill trigger toggles a floating DeadlineEditor" pattern
+// as everywhere else a subtask deadline gets set — but same as
+// `NewTaskPage` (also creating something that doesn't exist yet), it
+// just holds the picked value in local form state rather than saving
+// immediately; there's no subtask to PATCH until Add actually creates
+// one. `onAdd` is called with both `name` and `dateDeadline` (`null` if
+// never set) so callers can include it in the create request.
+//
+// `theme` is optional — passed only by TaskDetailPage, whose own
+// "+ Add subtask" trigger already colours itself off the page's current
+// state (`theme.title`). Passing it here makes this form's submit
+// button match that neighboring button exactly instead of introducing
+// a second, disconnected colour. TaskCard's list-view usage leaves it
+// unset and gets a fixed blue instead — the list has no equivalent
+// per-state themed button for this one to echo.
+export function AddSubtaskForm({ onAdd, onCancel, theme }) {
   const [name, setName] = useState('')
   const [dateDeadline, setDateDeadline] = useState(null)
   const [editingDeadline, openDeadlineEditor, closeDeadlineEditor] = useExclusiveDeadlineEditor()
@@ -60,7 +68,13 @@ export function AddSubtaskForm({ onAdd, onCancel }) {
           className="h-8 flex-1 bg-white text-xs"
           required
         />
-        <Button type="submit" size="sm" disabled={adding}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={adding}
+          style={theme ? { background: theme.title } : undefined}
+          className={theme ? 'text-white hover:brightness-110' : 'bg-[#4f7fd4] text-white hover:bg-[#3d68bd]'}
+        >
           {adding ? 'Adding…' : 'Add'}
         </Button>
         {onCancel && (
@@ -75,7 +89,7 @@ export function AddSubtaskForm({ onAdd, onCancel }) {
           type="button"
           onClick={() => (editingDeadline ? closeDeadlineEditor() : openDeadlineEditor())}
           disabled={adding}
-          className="w-fit rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:pointer-events-none disabled:opacity-60"
+          className="w-fit rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-medium text-[#6b46a8] transition-colors hover:bg-[#e9d5ff] disabled:pointer-events-none disabled:opacity-60"
         >
           {dateDeadline ? `Due ${formatDeadline(dateDeadline)}` : 'Set deadline'}
         </button>

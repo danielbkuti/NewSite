@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Logo } from '@/components/Logo'
 import { checkEmailExists } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
@@ -164,9 +165,7 @@ export function LandingPage() {
     <div className="min-h-screen">
       {/* ---- header ---- */}
       <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-6">
-        <span className="bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-2xl font-bold tracking-tight text-transparent">
-          FlexMaster
-        </span>
+        <Logo scale="secondary" />
         <nav className="flex items-center gap-4">
           <Link
             to="/login"
@@ -197,7 +196,7 @@ export function LandingPage() {
           <span>.</span>
         </h1>
         <p className="max-w-xl text-lg text-foreground/80">
-          FlexMaster tracks tasks, subtasks, and deadlines in one place — so nothing
+          Fauxcus tracks tasks, subtasks, and deadlines in one place — so nothing
           slips through.
         </p>
         <form
@@ -233,7 +232,7 @@ export function LandingPage() {
           <div className="mb-8 text-center">
             <h2 className="text-2xl font-semibold tracking-tight">Watch it work</h2>
             <p className="mt-2 text-sm text-foreground/70">
-              A live look at FlexMaster keeping a task list on track.
+              A live look at Fauxcus keeping a task list on track.
             </p>
           </div>
 
@@ -281,7 +280,7 @@ export function LandingPage() {
           Ready to get organized?
         </h2>
         <p className="mb-6 text-sm text-foreground/70">
-          Join FlexMaster and keep every task, deadline, and subtask in one place.
+          Join Fauxcus and keep every task, deadline, and subtask in one place.
         </p>
         <Button size="lg" render={<Link to="/signup" />} nativeButton={false}>
           Sign up free
@@ -290,7 +289,7 @@ export function LandingPage() {
 
       {/* ---- footer ---- */}
       <footer className="border-t border-foreground/10 p-6 text-center text-sm text-foreground/60">
-        © {new Date().getFullYear()} FlexMaster. All rights reserved.
+        © {new Date().getFullYear()} Fauxcus. All rights reserved.
       </footer>
     </div>
   )

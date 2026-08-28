@@ -1,3 +1,5 @@
+import { Logo } from '@/components/Logo'
+
 const COLUMNS = [
   {
     heading: 'Product',
@@ -27,8 +29,11 @@ const COLUMNS = [
 export function Footer() {
   return (
     <footer
-      className="relative mt-16 bg-neutral-900 pt-20 pb-10 text-neutral-300"
-      style={{ clipPath: 'polygon(0 40px, 100% 0, 100% 100%, 0 100%)' }}
+      className="relative mt-16 bg-cover bg-center pt-20 pb-10 text-neutral-300"
+      style={{
+        backgroundImage: 'url(/starfield-bg-wide.jpg)',
+        clipPath: 'polygon(0 40px, 100% 0, 100% 100%, 0 100%)',
+      }}
     >
       <div className="mx-auto grid max-w-6xl grid-cols-2 gap-x-8 gap-y-10 px-6 sm:grid-cols-4">
         {COLUMNS.map((column) => (
@@ -48,10 +53,10 @@ export function Footer() {
       </div>
 
       <div className="mx-auto mt-12 flex max-w-6xl flex-col items-center gap-3 border-t border-white/10 px-6 pt-6 text-xs text-neutral-500 sm:flex-row sm:justify-between">
-        <span className="bg-gradient-to-r from-[#e0c3fc] via-[#b79ce0] to-[#8ec5fc] bg-clip-text font-bold text-transparent">
-          FlexMaster
-        </span>
-        <span>© {new Date().getFullYear()} FlexMaster. All rights reserved.</span>
+        {/* 'black' (inverse) variant — a starfield ground, not a
+            light/neutral one the color tile is meant for. */}
+        <Logo variant="black" scale="secondary" />
+        <span>© {new Date().getFullYear()} Fauxcus. All rights reserved.</span>
       </div>
     </footer>
   )
