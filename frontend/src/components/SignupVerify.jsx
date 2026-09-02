@@ -4,7 +4,7 @@ import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { SignupProgress } from '@/components/SignupProgress'
-import { checkPendingSignup, submitSignupDetails, completeSignup } from '@/lib/auth'
+import { checkPendingSignup, verifySignupCode, startSignup, submitSignupDetails, completeSignup } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
 // Same boxed-field pattern used everywhere else in the auth forms.
@@ -86,16 +86,19 @@ function splitErrors(errors) {
   return { fieldErrors, generalError: __all__?.[0]?.message ?? null }
 }
 
-// The page the emailed link actually points at. Handles steps 2 (email
-// verification, automatic on mount), 3 (name/username), and 4 (password)
-// all in one place, since once someone's clicked the link the rest of
-// the flow is a normal continuous session again — no more device-hopping
-// concerns past this point.
+// The page SignupForm navigates to right after step 1. Handles step 2
+// (entering the emailed code), 3 (name/username), and 4 (password) all
+// in one place — once the code's been typed in, the rest of the flow
+// is a normal continuous session, same as it always was past that
+// point.
 export function SignupVerify({ onSignupSuccess }) {
   const { token } = useParams()
 
-  // 'loading' | 'invalid' | 'details' | 'password'
+  // 'loading' | 'invalid' | 'code' | 'details' | 'password'
   const [status, setStatus] = useState('loading')
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [resendState, setResendState] = useState('idle') // 'idle' | 'sending' | 'sent'
   const [values, setValues] = useState({
     firstName: '',
     lastName: '',
@@ -111,12 +114,17 @@ export function SignupVerify({ onSignupSuccess }) {
   useEffect(() => {
     checkPendingSignup(token)
       .then((data) => {
+        setEmail(data.email)
         setValues((v) => ({
           ...v,
           firstName: data.first_name,
           lastName: data.last_name,
           username: data.username,
         }))
+        if (!data.email_verified) {
+          setStatus('code')
+          return
+        }
         // Resuming a signup that already finished step 3 (e.g. a page
         // refresh) skips straight to the password step instead of
         // asking for the name again.
@@ -132,6 +140,44 @@ export function SignupVerify({ onSignupSuccess }) {
     onFocus: () => setFocusedField(field),
     onBlur: () => setFocusedField((f) => (f === field ? null : f)),
   })
+
+  async function handleCodeSubmit(event) {
+    event.preventDefault()
+    setGeneralError(null)
+    setSubmitting(true)
+
+    try {
+      const data = await verifySignupCode(token, code)
+      setValues((v) => ({
+        ...v,
+        firstName: data.first_name,
+        lastName: data.last_name,
+        username: data.username,
+      }))
+      setStatus(data.first_name && data.last_name ? 'password' : 'details')
+    } catch (err) {
+      setGeneralError(err.data?.detail ?? 'Something went wrong. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleResend() {
+    setResendState('sending')
+    setGeneralError(null)
+    try {
+      await startSignup(email)
+      setCode('')
+      setResendState('sent')
+      // Swaps the "on its way" note back to a live resend link after a
+      // bit — otherwise a second genuinely-lost code would leave no way
+      // back to the button without a refresh.
+      setTimeout(() => setResendState((s) => (s === 'sent' ? 'idle' : s)), 15000)
+    } catch {
+      setResendState('idle')
+      setGeneralError('Could not resend the code. Please try again.')
+    }
+  }
 
   async function handleDetailsSubmit(event) {
     event.preventDefault()
@@ -181,7 +227,7 @@ export function SignupVerify({ onSignupSuccess }) {
     return (
       <Card className="w-full max-w-sm zoom-[1.125] border-transparent bg-[#f8f9fa] text-black shadow-2xl">
         <CardContent className="flex flex-col items-center gap-4 pt-6 text-center">
-          <p className="text-sm text-black/70">Verifying your link…</p>
+          <p className="text-sm text-black/70">One moment…</p>
         </CardContent>
       </Card>
     )
@@ -191,13 +237,71 @@ export function SignupVerify({ onSignupSuccess }) {
     return (
       <Card className="w-full max-w-sm zoom-[1.125] border-transparent bg-[#f8f9fa] text-black shadow-2xl">
         <CardContent className="flex flex-col items-center gap-4 pt-6 text-center">
-          <h2 className="text-2xl font-bold text-black">Link invalid or expired</h2>
+          <h2 className="text-2xl font-bold text-black">Signup no longer valid</h2>
           <p className="text-sm text-black/70">
-            This signup link is no longer valid. Start again below.
+            This signup has expired. Start again below.
           </p>
           <Link to="/signup" className="text-sm font-semibold text-sky-600 hover:underline">
             Back to signup
           </Link>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (status === 'code') {
+    return (
+      <Card className="w-full max-w-sm zoom-[1.125] border-transparent bg-[#f8f9fa] text-black shadow-2xl">
+        <CardContent className="flex flex-col gap-5 pt-6">
+          <SignupProgress currentStep="verify" />
+
+          <div className="flex flex-col gap-2 text-center">
+            <h2 className="text-2xl font-bold text-black">Check your email</h2>
+            <p className="text-sm text-black/70">
+              We sent a 6-digit code to <span className="font-semibold">{email}</span>.
+              Enter it below to continue.
+            </p>
+          </div>
+
+          <form onSubmit={handleCodeSubmit} className="flex flex-col gap-4">
+            <AuthField
+              id="code"
+              label="Verification code"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              focused={focusedField === 'code'}
+              autoComplete="one-time-code"
+              {...focusHandlers('code')}
+            />
+
+            {generalError && <p className="text-xs text-destructive">{generalError}</p>}
+
+            <Button
+              type="submit"
+              disabled={submitting || code.length !== 6}
+              className="w-full rounded-full py-3 text-base font-semibold hover:bg-[#8ec5fc] hover:text-black"
+            >
+              {submitting ? 'Verifying…' : 'Verify'}
+            </Button>
+          </form>
+
+          <p className="text-center text-xs text-black/70">
+            {resendState === 'sent' ? (
+              'A new code is on its way.'
+            ) : (
+              <>
+                Didn&apos;t get a code?{' '}
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={resendState === 'sending'}
+                  className="font-semibold text-sky-600 hover:underline disabled:opacity-60"
+                >
+                  {resendState === 'sending' ? 'Sending…' : 'Resend it'}
+                </button>
+              </>
+            )}
+          </p>
         </CardContent>
       </Card>
     )

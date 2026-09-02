@@ -9,3 +9,6 @@ __pycache__/
 db.sqlite3
 *.log
 .DS_Store
+
+# graphify tool output — analysis cache, not app code
+graphify-out/

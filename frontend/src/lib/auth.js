@@ -17,6 +17,10 @@ export function logout() {
 
 // --- Multi-step signup flow ---
 
+// Also doubles as "resend the code" — same call, a fresh code each
+// time. Response now includes `token`, since the frontend navigates
+// itself to the verify step rather than only reaching it via a clicked
+// email link.
 export function startSignup(email) {
   return apiFetch('/user/api/signup/start/', {
     method: 'POST',
@@ -26,6 +30,13 @@ export function startSignup(email) {
 
 export function checkPendingSignup(token) {
   return apiFetch(`/user/api/signup/pending/${token}/`)
+}
+
+export function verifySignupCode(token, code) {
+  return apiFetch(`/user/api/signup/verify-code/${token}/`, {
+    method: 'POST',
+    body: { code },
+  })
 }
 
 export function submitSignupDetails(token, { firstName, lastName, username }) {

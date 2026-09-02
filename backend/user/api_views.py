@@ -1,4 +1,5 @@
 import json
+import secrets
 from datetime import timedelta
 
 from django.conf import settings
@@ -21,7 +22,7 @@ from .forms import (
     ChangePasswordForm,
     DeleteAccountForm,
 )
-from .models import PendingSignup, generate_signup_token
+from .models import PendingSignup, generate_signup_code
 from .ratelimit import is_rate_limited, record_attempt, reset_rate_limit
 from .services import (
     send_signup_verification_email,
@@ -31,8 +32,21 @@ from .services import (
 
 User = get_user_model()
 
-# How long a signup-in-progress (and its verification link) stays valid.
+# How long a signup-in-progress stays valid overall (steps 1-4).
 PENDING_SIGNUP_EXPIRY = timedelta(hours=24)
+
+# How long a single emailed code stays valid, and how many wrong
+# guesses against it are allowed before it's locked out (rather than
+# just letting someone try all million 6-digit codes) — a fresh code
+# via "resend" (signup_start_api again) resets both.
+SIGNUP_CODE_EXPIRY = timedelta(minutes=15)
+SIGNUP_CODE_MAX_ATTEMPTS = 5
+
+# Wrong-code guesses, per IP — on top of the per-record attempt cap
+# above, since that alone doesn't stop one IP from grinding through
+# many different pending signups' codes.
+SIGNUP_CODE_RATE_LIMIT = 10
+SIGNUP_CODE_RATE_WINDOW_SECONDS = 15 * 60
 
 # Failed login attempts, per IP, before login_api starts refusing to
 # even check credentials for a while — a brute-force throttle, not an
@@ -121,12 +135,19 @@ def signup_start_api(request):
     """
     Step 1 of the new multi-step signup flow: takes just an email,
     rejects it if a real account already has it, and otherwise creates
-    (or refreshes) a PendingSignup and emails a verification link that
+    (or refreshes) a PendingSignup and emails a 6-digit code that
     continues the flow at /signup/verify/<token>/ in the React app.
+    Returns the token directly (unlike the old link-based flow, the
+    frontend needs it up front to navigate there itself and to submit
+    the code against).
 
-    Re-submitting the same not-yet-verified email is treated as "start
-    over" — it gets a fresh token (invalidating the old link) and its
-    in-progress fields reset, rather than erroring.
+    Also doubles as "resend the code" — re-submitting the same
+    not-yet-verified email gets a fresh code (invalidating the old one)
+    and its in-progress fields reset, rather than erroring. The token
+    itself is deliberately *not* regenerated on an existing record: the
+    frontend is already sitting on /signup/verify/<token> when it calls
+    this to resend, and rotating the token out from under that URL
+    would 404 its own next request.
     """
     try:
         data = json.loads(request.body or "{}")
@@ -142,20 +163,19 @@ def signup_start_api(request):
 
     email = form.cleaned_data["email"]
 
-    pending, _created = PendingSignup.objects.update_or_create(
-        email=email,
-        defaults={
-            "token": generate_signup_token(),
-            "email_verified": False,
-            "first_name": "",
-            "last_name": "",
-            "username": "",
-        },
-    )
+    pending = PendingSignup.objects.filter(email=email).first() or PendingSignup(email=email)
+    pending.email_verified = False
+    pending.code = generate_signup_code()
+    pending.code_attempts = 0
+    pending.code_sent_at = timezone.now()
+    pending.first_name = ""
+    pending.last_name = ""
+    pending.username = ""
+    pending.save()
 
     send_signup_verification_email(pending)
 
-    return JsonResponse({"success": True})
+    return JsonResponse({"success": True, "token": pending.token})
 
 
 @require_http_methods(["GET", "PATCH"])
@@ -163,10 +183,16 @@ def signup_pending_api(request, token):
     """
     One resource, two actions on it:
 
-    - GET: hit when the emailed verification link is clicked. Marks the
-      email verified and reports back what's already filled in, so the
-      frontend knows which step to resume on (also makes a page refresh
-      mid-flow non-destructive).
+    - GET: reports what's already filled in, so the frontend knows
+      which step to resume on — the code screen if the email isn't
+      verified yet, otherwise details/password (also makes a page
+      refresh mid-flow non-destructive). Deliberately read-only now:
+      it used to mark the email verified just by being loaded, back
+      when reaching this page at all meant the link had been clicked.
+      Now that the token is handed to the frontend directly (see
+      signup_start_api) rather than only living inside an emailed
+      link, that would let anyone skip the code entirely — actual
+      verification happens only in signup_verify_code_api below.
     - PATCH: step 3 — submits first/last name + an optional username.
       Requires the email to already be verified — enforces the step
       order server-side, not just by however the frontend happens to
@@ -182,10 +208,6 @@ def signup_pending_api(request, token):
         return JsonResponse({"detail": "This link is invalid or has expired."}, status=404)
 
     if request.method == "GET":
-        if not pending.email_verified:
-            pending.email_verified = True
-            pending.save(update_fields=["email_verified"])
-
         return JsonResponse({
             "email": pending.email,
             "email_verified": pending.email_verified,
@@ -218,6 +240,81 @@ def signup_pending_api(request, token):
     return JsonResponse({
         "success": True,
         "email": pending.email,
+        "first_name": pending.first_name,
+        "last_name": pending.last_name,
+        "username": pending.username,
+    })
+
+
+@require_http_methods(["POST"])
+def signup_verify_code_api(request, token):
+    """
+    Step 2 — checks the code emailed by signup_start_api against what
+    the user typed in. Two independent throttles on top of each other:
+    a per-record attempt count (so one pending signup's code can't just
+    be brute-forced through all million 6-digit values) and a per-IP
+    rate limit (so one IP can't grind through many different pending
+    signups instead). Only failed guesses count against either — a
+    correct code always succeeds regardless of how many wrong ones
+    came before it, as long as neither cap was already hit.
+    """
+    try:
+        pending = PendingSignup.objects.get(token=token)
+    except PendingSignup.DoesNotExist:
+        return JsonResponse({"detail": "This link is invalid or has expired."}, status=404)
+
+    if timezone.now() - pending.created_at > PENDING_SIGNUP_EXPIRY:
+        pending.delete()
+        return JsonResponse({"detail": "This link is invalid or has expired."}, status=404)
+
+    # Idempotent — a retry/double-submit after already verifying just
+    # reports success again rather than erroring on an attempts cap
+    # that no longer matters.
+    if pending.email_verified:
+        return JsonResponse({
+            "email": pending.email,
+            "email_verified": True,
+            "first_name": pending.first_name,
+            "last_name": pending.last_name,
+            "username": pending.username,
+        })
+
+    if is_rate_limited(request, "signup_verify_code", SIGNUP_CODE_RATE_LIMIT, SIGNUP_CODE_RATE_WINDOW_SECONDS):
+        return JsonResponse({
+            "detail": "Too many attempts. Please wait a while and try again.",
+        }, status=429)
+
+    if pending.code_attempts >= SIGNUP_CODE_MAX_ATTEMPTS:
+        return JsonResponse({
+            "detail": "Too many incorrect attempts. Request a new code and try again.",
+        }, status=429)
+
+    if timezone.now() - pending.code_sent_at > SIGNUP_CODE_EXPIRY:
+        return JsonResponse({"detail": "This code has expired. Request a new one."}, status=400)
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "Invalid JSON body."}, status=400)
+
+    code = str(data.get("code", "")).strip()
+
+    if not code or not secrets.compare_digest(code, pending.code):
+        record_attempt(request, "signup_verify_code", SIGNUP_CODE_RATE_WINDOW_SECONDS)
+        pending.code_attempts += 1
+        pending.save(update_fields=["code_attempts"])
+        remaining = max(0, SIGNUP_CODE_MAX_ATTEMPTS - pending.code_attempts)
+        return JsonResponse({
+            "detail": "That code isn't right." + (f" {remaining} attempt(s) left." if remaining else ""),
+        }, status=400)
+
+    reset_rate_limit(request, "signup_verify_code")
+    pending.email_verified = True
+    pending.save(update_fields=["email_verified"])
+
+    return JsonResponse({
+        "email": pending.email,
+        "email_verified": True,
         "first_name": pending.first_name,
         "last_name": pending.last_name,
         "username": pending.username,

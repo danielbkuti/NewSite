@@ -2,16 +2,18 @@
 // the mix from reading purple.
 const FW_COLORS = ['#8ec5fc', '#4f8ef7', '#f9a8d4', '#ec4899', '#c7dcff']
 
-// Three emitters, left → right, so the celebration sweeps the card instead
-// of popping from one corner. `scale` sizes the shell; the centre one is
-// biggest, which puts the visual weight in the middle of the card.
+// Five emitters, left → right, so the celebration sweeps the whole card
+// instead of popping from one or two spots. `scale` sizes the shell; the
+// centre one is biggest, which puts the visual weight in the middle of
+// the card.
 const FW_EMITTERS = [
-  { left: '20%', top: '30px', delay: 0, scale: 1.0 },
-  { left: '52%', top: '12px', delay: 280, scale: 1.3 },
-  { left: '82%', top: '38px', delay: 540, scale: 0.9 },
+  { left: '10%', top: '34px', delay: 0, scale: 0.85 },
+  { left: '30%', top: '14px', delay: 160, scale: 1.05 },
+  { left: '52%', top: '4px', delay: 320, scale: 1.3 },
+  { left: '74%', top: '16px', delay: 480, scale: 1.05 },
+  { left: '92%', top: '36px', delay: 640, scale: 0.85 },
 ]
 
-const RISE_MS = 340 // trail flight time before the shell breaks
 const SPARK_COUNT = 22 // outer ring
 const SPARK2_COUNT = 10 // inner ring, all white, fires 50ms later
 
@@ -69,26 +71,15 @@ function innerSparkStyle(i, scale, burstAt) {
   }
 }
 
-// A single shell: rising trail → white flash → expanding ring → two rings
-// of sparks, all timed off the same `burstAt` moment so it reads as one
-// event rather than four separate effects.
+// A single shell: white flash → expanding ring → two rings of sparks,
+// all timed off the same `burstAt` moment so it reads as one event
+// rather than three separate effects. Bursts immediately at `em.delay`
+// — no rising trail beforehand (that read as a stray dot appearing
+// before the "explosion", not part of it).
 function Shell({ em, e }) {
-  const burstAt = em.delay + RISE_MS
+  const burstAt = em.delay
   return (
     <div className="absolute" style={{ left: em.left, top: em.top, width: 0, height: 0 }}>
-      <span
-        className="absolute rounded-[2px] bg-white"
-        style={{
-          left: '-1.5px',
-          top: 0,
-          width: '3px',
-          height: '10px',
-          boxShadow: '0 0 10px 3px #f9a8d4',
-          transformOrigin: 'bottom',
-          '--from': `${96 * em.scale}px`,
-          animation: `fw-rise ${RISE_MS}ms ease-out ${em.delay}ms forwards`,
-        }}
-      />
       <span
         className="absolute rounded-full"
         style={{
@@ -98,6 +89,13 @@ function Shell({ em, e }) {
           height: `${32 * em.scale}px`,
           background:
             'radial-gradient(circle, #fff 0%, rgba(249,168,212,.8) 38%, rgba(142,197,252,.35) 60%, rgba(142,197,252,0) 76%)',
+          // Explicit resting opacity — without it, the shape sits here
+          // fully visible at its plain (unanimated) size for the whole
+          // `burstAt` delay, reading as a little circle sitting on the
+          // card before it "explodes". Same fix as the spark styles
+          // below already had (they set opacity: 0 inline); this and
+          // the ring beneath it didn't.
+          opacity: 0,
           animation: `fw-flash 520ms ease-out ${burstAt}ms forwards`,
         }}
       />
@@ -109,6 +107,7 @@ function Shell({ em, e }) {
           width: `${170 * em.scale}px`,
           height: `${170 * em.scale}px`,
           border: '3px solid rgba(236,72,153,.6)',
+          opacity: 0,
           animation: `fw-ring 760ms cubic-bezier(.2,.7,.3,1) ${burstAt}ms forwards`,
         }}
       />
@@ -137,9 +136,8 @@ function Shell({ em, e }) {
 const FIREWORKS_ENABLED = true
 
 // A short celebratory burst covering its positioned parent — used by
-// TaskCard when a task is marked complete, before it actually drops down
-// into the Completed section. Three shells fired left-to-right across the
-// card rather than a single pop from one corner.
+// TaskCard when a task or subtask is marked complete. Five shells fired
+// left-to-right across the card rather than a single pop from one corner.
 export function ConfettiBurst() {
   if (!FIREWORKS_ENABLED) return null
 

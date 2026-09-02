@@ -43,7 +43,9 @@ import { cn } from '@/lib/utils'
 // (white outline traced around the letterforms, a white "lip" along the
 // notch's top/left edge, and a shorter/wider tile so the notch keeps
 // room for the check to read) — the rest of each scale is unchanged
-// from before that pass.
+// from before that pass. The outline itself is a stroked copy of the
+// word behind the filled glyph, not a single-span paintOrder stroke —
+// see the lettering render below for why.
 const SCALES = {
   primary: {
     fontSize: 74,
@@ -54,7 +56,7 @@ const SCALES = {
     checkSize: 26,
     checkStroke: 3.4,
     starfield: true,
-    outlineStroke: 3.5,
+    outlineStroke: 3,
     lip: 2,
   },
   secondary: {
@@ -66,7 +68,7 @@ const SCALES = {
     checkSize: 12,
     checkStroke: 4.2,
     starfield: true,
-    outlineStroke: 1.6,
+    outlineStroke: 1.4,
     lip: 1.5,
   },
   // Below 30px type the photo has no room to read as stars — it's just
@@ -85,7 +87,7 @@ const SCALES = {
     checkSize: 8,
     checkStroke: 5.5,
     starfield: false,
-    outlineStroke: 0.9,
+    outlineStroke: 0.7,
     lip: 1,
   },
 }
@@ -184,6 +186,16 @@ export function Logo({ variant = 'color', scale = 'secondary', sizeScale = 1, cl
 
   const checkMask = checkCutoutMask(s.notch, s.checkSize, s.checkStroke)
 
+  const lettersBaseStyle = {
+    display: 'block',
+    fontFamily: 'var(--font-display)',
+    fontWeight: 700,
+    fontSize: s.fontSize,
+    lineHeight: 1,
+    letterSpacing: s.tracking,
+    whiteSpace: 'nowrap',
+  }
+
   return (
     <span
       className={cn('relative inline-block overflow-hidden align-middle', className)}
@@ -196,32 +208,52 @@ export function Logo({ variant = 'color', scale = 'secondary', sizeScale = 1, cl
     >
       {isBlack && <span aria-hidden="true" className="gradient-ring" />}
 
-      <span
-        aria-hidden="true"
-        style={{
-          display: 'block',
-          fontFamily: 'var(--font-display)',
-          fontWeight: 700,
-          fontSize: s.fontSize,
-          lineHeight: 1,
-          letterSpacing: s.tracking,
-          whiteSpace: 'nowrap',
-          ...letterStyle,
-          // Traced around the letterforms so the fill (starfield/gradient/
-          // solid ink, whichever letterStyle picked above) separates from
-          // the tile behind it — see logo-outline-handoff.md. `paintOrder:
-          // 'stroke fill'` is load-bearing: Chrome honours paint-order on
-          // HTML text and paints the stroke *under* the glyph so only its
-          // outer half shows, avoiding the pinch a second stroked copy of
-          // the word produced at the tight bend of the "s". Not clipped by
-          // background-clip: text, so it survives on the transparent-fill
-          // spans too.
-          WebkitTextStroke: `${s.outlineStroke}px ${OUTLINE_COLOR}`,
-          paintOrder: 'stroke fill',
-        }}
-      >
-        Fauxcus
-      </span>
+      {resolvedLetterFill === 'solid' ? (
+        // Icon scale's lettering is already opaque ink, so the fill
+        // itself covers the inner half of a centred stroke — one span,
+        // `paintOrder: 'stroke fill'` puts the stroke under the glyph.
+        <span
+          aria-hidden="true"
+          style={{
+            ...lettersBaseStyle,
+            ...letterStyle,
+            WebkitTextStroke: `${s.outlineStroke}px ${OUTLINE_COLOR}`,
+            paintOrder: 'stroke fill',
+          }}
+        >
+          Fauxcus
+        </span>
+      ) : (
+        // Starfield/gradient lettering has a *transparent* fill
+        // (background-clip: text), so there's nothing opaque to hide a
+        // centred stroke's inner half — `paintOrder` alone left the
+        // letterforms' counters closed up. Instead: a stroked, unfilled
+        // copy sits behind the real glyph, and the real glyph's own
+        // image fill masks the stroke's inner half, leaving only the
+        // outer half visible (net outline ≈ half of outlineStroke). Both
+        // copies must share every metric (font/size/tracking/nowrap) or
+        // the contours drift apart — see logo-outline-handoff.md.
+        <span style={{ position: 'relative', display: 'block' }}>
+          <span
+            aria-hidden="true"
+            style={{
+              ...lettersBaseStyle,
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              background: 'none',
+              color: 'transparent',
+              WebkitTextFillColor: 'transparent',
+              WebkitTextStroke: `${s.outlineStroke}px ${OUTLINE_COLOR}`,
+            }}
+          >
+            Fauxcus
+          </span>
+          <span aria-hidden="true" style={{ ...lettersBaseStyle, ...letterStyle, position: 'relative' }}>
+            Fauxcus
+          </span>
+        </span>
+      )}
       {/* Visually identical text for anything that reads the DOM (a11y
           tree, copy/paste, find-in-page) — the span above is aria-hidden
           since its "text" is really an image fill. */}

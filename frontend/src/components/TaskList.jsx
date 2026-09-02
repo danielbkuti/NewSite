@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ListChecks, X } from 'lucide-react'
+import { ListChecks, SquarePlus, X } from 'lucide-react'
 import { TaskCard, SubtaskStackCard } from '@/components/TaskCard'
 import { OverdueGateModal, collectOverdueItems } from '@/components/OverdueGateModal'
 import { Button } from '@/components/ui/button'
@@ -461,9 +461,25 @@ export function TaskList() {
       )}
 
       {tasks.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No tasks yet — add one with the + button in the corner.
-        </p>
+        // Same clickable-card treatment as Dashboard's own empty
+        // "Upcoming" state — a graphic + CTA pill, not just a line of
+        // text, since this is most people's very first screen after
+        // signing up.
+        <Link
+          to="/tasks/new"
+          className="group flex flex-col items-center gap-3 rounded-xl border border-dashed py-12 text-center transition-colors hover:border-[#56a456]/50 hover:bg-[#56a456]/5"
+        >
+          <div className="flex size-12 items-center justify-center rounded-full bg-[#56a456]/10 text-[#56a456] transition-transform duration-200 group-hover:scale-110">
+            <ListChecks className="size-5" />
+          </div>
+          <p className="text-sm font-medium">
+            No tasks yet — add one to get started.
+          </p>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#56a456] px-4 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#56a456]/25 transition-transform duration-200 group-hover:scale-105">
+            <SquarePlus className="size-3.5" />
+            Add a new task
+          </span>
+        </Link>
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">

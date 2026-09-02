@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { SquarePlus, Target, CalendarDays, Sparkles } from 'lucide-react'
+import { SquarePlus, Target, CalendarDays, Sparkles, Flame } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { TaskFeaturePreview } from '@/components/TaskFeaturePreview'
@@ -9,6 +9,25 @@ import { cn } from '@/lib/utils'
 import { useDeadlineStatus } from '@/hooks/useDeadlineStatus'
 import { updateTask, updateSubTask } from '@/lib/tasks'
 import { useTaskStore } from '@/context/TaskStoreContext'
+import { computeStats } from '@/lib/stats'
+
+// Ticks slowly (same 30s "slow tick" interval useDeadlineStatus already
+// uses for its own non-urgent case) — plenty for a clock that only
+// displays minutes, no seconds.
+function useClock() {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000)
+    return () => clearInterval(id)
+  }, [])
+  return now
+}
+
+function formatNow(date) {
+  const day = date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  return `${day} · ${time}`
+}
 
 function formatDeadline(iso) {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -168,9 +187,21 @@ function UpcomingRow({ item, celebrating, onToggle }) {
   )
 }
 
-export function Dashboard({ firstName, username }) {
+export function Dashboard({ firstName, username, justLoggedIn, onWelcomeSeen }) {
   const { tasks, status, refreshTasks } = useTaskStore()
   const displayName = firstName || username || 'there'
+  const now = useClock()
+  const { currentStreak } = computeStats(tasks).habits
+  // Captured once, on mount — whether *this* render of the dashboard
+  // followed an actual login (not a later navigation back to /home in
+  // the same session). Consuming the prop via onWelcomeSeen right away
+  // means a later remount (e.g. logout/login again) can retrigger it,
+  // but simply revisiting /home afterward can't.
+  const [animateWelcome] = useState(() => Boolean(justLoggedIn))
+  useEffect(() => {
+    if (justLoggedIn) onWelcomeSeen?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // Kind-prefixed ids (`task-3`, `subtask-9`) currently mid-celebration
   // — kept in the list (checked, struck through) even though they're
   // already `completed` server-side, until their timer clears. Same
@@ -251,7 +282,38 @@ export function Dashboard({ firstName, username }) {
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="text-3xl font-bold tracking-tight">Welcome back, {displayName}</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+          Welcome back,{' '}
+          {animateWelcome ? (
+            // Overlay technique (base copy underneath for a11y + layout,
+            // gradient-clipped copy on top, wiped in via clip-path) — same
+            // two-layer idea Logo.jsx uses for its outline, just animated
+            // once instead of static.
+            <span className="relative inline-block">
+              <span>{displayName}</span>
+              <span
+                aria-hidden="true"
+                className="welcome-name-gradient animate-welcome-name-fill absolute inset-0"
+              >
+                {displayName}
+              </span>
+            </span>
+          ) : (
+            displayName
+          )}
+        </h1>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {currentStreak > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1.5 text-sm font-semibold text-orange-600 ring-1 ring-orange-200">
+              <Flame className="size-4 fill-orange-500 text-orange-500" />
+              {currentStreak}-day streak
+            </span>
+          )}
+          <span className="text-sm text-muted-foreground">{formatNow(now)}</span>
+        </div>
+      </div>
 
       <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-3">
         <ActionCard
@@ -295,14 +357,21 @@ export function Dashboard({ firstName, username }) {
         )}
 
         {status === 'ready' && upcoming.length === 0 && (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-12 text-center">
-            <div className="flex size-12 items-center justify-center rounded-full bg-[#56a456]/10 text-[#56a456]">
+          <Link
+            to="/tasks/new"
+            className="group flex flex-col items-center gap-3 rounded-xl border border-dashed py-12 text-center transition-colors hover:border-[#56a456]/50 hover:bg-[#56a456]/5"
+          >
+            <div className="flex size-12 items-center justify-center rounded-full bg-[#56a456]/10 text-[#56a456] transition-transform duration-200 group-hover:scale-110">
               <Sparkles className="size-5" />
             </div>
             <p className="text-sm font-medium">
               Let&apos;s start getting things done — add a new task or goal.
             </p>
-          </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#56a456] px-4 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#56a456]/25 transition-transform duration-200 group-hover:scale-105">
+              <SquarePlus className="size-3.5" />
+              Add a new task
+            </span>
+          </Link>
         )}
 
         {status === 'ready' && upcoming.length > 0 && (

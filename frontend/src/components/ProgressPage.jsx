@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useTaskStore } from '@/context/TaskStoreContext'
 import { formatDeadline } from '@/lib/utils'
 import { StatsPanel } from '@/components/StatsPanel'
+import { ProgressCharts } from '@/components/ProgressCharts'
 import { TaskSearch } from '@/components/TaskSearch'
 
 // The "View all completed" / "View more" destination from the task
@@ -47,15 +48,16 @@ export function ProgressPage() {
   const nothingCompleted = completedTasks.length === 0 && completedSubtasks.length === 0
 
   return (
-    <div className="mx-auto max-w-3xl px-8 py-8">
+    <div className="mx-auto max-w-5xl px-8 py-8">
       <h1 className="mb-1 text-2xl font-semibold tracking-tight">Progress</h1>
       <p className="mb-4 text-sm text-muted-foreground">Stats, habits, and everything you&apos;ve completed.</p>
-      <div className="mb-6">
+      <div className="mb-6 max-w-3xl">
         <TaskSearch />
       </div>
 
       {tasks.length > 0 && (
-        <div className="mb-8">
+        <div className="mb-8 flex flex-col gap-5">
+          <ProgressCharts tasks={tasks} />
           <StatsPanel tasks={tasks} />
         </div>
       )}
@@ -65,7 +67,7 @@ export function ProgressPage() {
           Nothing completed yet — finished tasks and subtasks will show up here.
         </p>
       ) : (
-        <div className="flex flex-col gap-8">
+        <div className="flex max-w-3xl flex-col gap-8">
           <section>
             <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
               Completed tasks ({completedTasks.length})

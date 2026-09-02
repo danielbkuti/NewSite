@@ -1133,3 +1133,189 @@ around — several environment quirks not previously documented here:
 **End state**: `main` only, locally and on `origin`, both at `847f84f`, clean working tree,
 single worktree (this one). `git log --graph` confirms the merge history is exactly what it
 should be — no orphaned merges, no divergence.
+
+## Correction to "Git state right now" at the top of this file — read this before that section
+Everything the top section describes as pending has since landed: **PR #3 is merged**, and a
+further round on top of it (`ea0302c`, "Add profile page, remodel new-task page, task search,
+progress stats, logo outline") is merged too. `main` and `origin/main` are currently in sync at
+`dcac830` ("Merge branch 'worktree-graphify-setup'"), shared-checkout working tree clean except
+two untracked items (`fauxcus-icons/`, `logo-outline-handoff.md`). Don't trust the top section's
+commit hashes/PR-open claim — this note supersedes it; the rest of that section's non-git content
+(response style, architecture facts) is still accurate.
+
+## Digit-code signup, landing page redesign, Progress charts, Dashboard polish — several
+## conversations, one long-lived worktree, all still uncommitted
+Everything below sits in `.claude/worktrees/graphify-setup` (branch `worktree-graphify-setup`),
+currently checked out at `ea0302c` — already fully merged into `main` (see the correction just
+above) — **plus a large uncommitted diff on top of that** (25 files changed, ~1000 lines, per
+`git diff --stat` in that worktree). None of this has been asked to be committed/merged/pushed
+by any of the conversations that built it. Whoever picks this up next: read the diff yourself
+before trusting this summary to the letter, per this file's own opening rule.
+
+**Also uncommitted/untracked in that same worktree, from even earlier sessions, still sitting
+there**: `LICENSE` (MIT, new file — `main` has none yet), `.env.example`/`.gitignore`/`README.md`
+tweaks (a pre-launch audit round: added missing `ALLOWED_HOSTS`/`FRONTEND_URL` to the example env
+file, excluded `graphify-out/` from git, added a License section to the README).
+
+1. **Dashboard welcome header** (`Dashboard.jsx`) — the "Welcome back" heading is bigger
+   (`text-4xl`/`5xl`), and the user's name wipes in with the brand gradient once, right after an
+   actual login (a `justLoggedIn` flag threaded through `App.jsx`'s `handleAuthSuccess` →
+   consumed on Dashboard mount so a later revisit to `/home` doesn't replay it). A 🔥 streak pill
+   (reusing `computeStats().habits.currentStreak`) and a live date/time (ticking every 30s,
+   minutes only) sit next to it. CSS: `.welcome-name-gradient`/`.animate-welcome-name-fill` in
+   `index.css` — needed `-webkit-text-fill-color: transparent` alongside `color: transparent`
+   for Safari, which otherwise ignores the latter under `background-clip: text` and paints the
+   name in its normal color, silently hiding the gradient entirely. That was a real bug reported
+   mid-session ("I don't see any gradient fill up") — fixed by adding the missing property, not
+   by changing the animation.
+2. **Empty-state CTA boxes** — the Dashboard's empty "Upcoming" box and the Tasks page's own
+   empty-task-list message (`TaskList.jsx`, previously just a text line) are now both clickable
+   cards (icon + green "Add a new task" pill) linking to `/tasks/new`.
+3. **Confetti/fireworks bug fixes** — two real, previously-unfixed bugs, both about the
+   flash/ring elements in `ConfettiBurst.jsx` and `TaskDetailCelebrations.jsx`:
+   - The "little circle before it explodes" complaint (survived an earlier round that removed
+     a *different* rising-trail element) was these spans having no resting `opacity: 0` —
+     during their `animation-delay`, a CSS animation doesn't apply its 0% keyframe, so the
+     element sat there at full, unanimated opacity/size the whole delay. Fixed by adding
+     `opacity: 0` to the flash/ring spans' inline style, same technique the spark spans already
+     used.
+   - Row-scale subtask confetti (`TaskDetailCelebrations.jsx`'s `CONF_EMITTERS`) used fixed
+     pixel `left` offsets (capping at 290px), so on any row wider than that the burst clustered
+     entirely on the left. Converted to percentages, matching how the card-scale
+     `ConfettiBurst.jsx` already did it.
+   - Confetti-on-subtask-complete on the task list page was checked and confirmed **already
+     working** (both the collapsed peek-stack and promoted-subtask-row code paths) — the ghost-
+     circle bug above likely made it read as broken.
+4. **Signup rewritten from an emailed link to a 6-digit code** — backend: `PendingSignup`
+   (`backend/user/models.py`) gained `code`/`code_attempts`/`code_sent_at`; new
+   `signup_verify_code_api` view (`backend/user/api_views.py`) with a per-record attempt cap (5)
+   *and* a per-IP rate limit, 15-minute code expiry; `signup_start_api` now returns the token
+   directly (frontend navigates itself to `/signup/verify/<token>` instead of only reaching it
+   via a clicked email link) and, on a resend, **keeps the same token** — regenerating it would
+   404 the very next request from a frontend already sitting on that URL. `signup_pending_api`'s
+   GET no longer auto-verifies just by being loaded (that was fine when only a clicked link could
+   reach it; now the token is handed to the frontend openly, so real verification only happens in
+   `signup_verify_code_api`). Frontend: `SignupForm.jsx` navigates straight to the verify page;
+   `SignupVerify.jsx` gained a `'code'` step (6-digit input, wrong-code error with attempts-left
+   count, a "Resend it" link with a 15s cooldown message).
+   - **Migration `0005_pendingsignup_code_pendingsignup_code_attempts_and_more.py` exists only
+     as an untracked file in this worktree — it is NOT applied to the live dev DB right now**
+     (confirmed via `showmigrations user` just before writing this note: only 0001-0004 show
+     `[X]`). It *was* applied and fully tested end-to-end (real signup, wrong code, resend,
+     lockout, full flow to a real logged-in account) during development, then deliberately
+     unapplied and reverted afterward, since the docker container mounts the **shared checkout**
+     (`/Users/flexduck/Projects/flexmaster`), not this worktree, and every sync-test-revert cycle
+     needs the shared checkout left clean when done (see the architecture note this file already
+     has about that mount, if present, or just: `docker inspect flexmaster_web` shows the bind
+     mount). **Before this feature will work again, whoever lands it needs to**: copy this
+     worktree's touched `backend/user/*` files (+ the migration) into the shared checkout, run
+     `makemigrations`/`migrate` there so the container picks it up, test, then either commit from
+     the worktree (bringing the migration file with it) or repeat the sync-revert dance if just
+     testing again.
+5. **Email sender identity fixed** — signup/reset emails were showing the sender's own personal
+   Gmail name instead of "Fauxcus". Root cause: `backend/user/services.py`'s `send_mail()` calls
+   hardcoded `'noreply@yourdomain.com'` as the from-address, which Gmail's SMTP relay doesn't
+   recognize as belonging to the authenticated account (`EMAIL_HOST_USER`) — it silently discards
+   an unrecognized From header and substitutes the account's own default identity. Fixed by using
+   `settings.DEFAULT_FROM_EMAIL` (now `'Fauxcus <pantheraleo440@gmail.com>'`, same real Gmail
+   address — user explicitly chose the display-name-only fix over adding a Gmail alias or
+   switching providers) in all three `send_mail()` calls. Address itself is unchanged; only the
+   name Gmail shows next to it changes.
+6. **Landing page redesign** — run through the `taste-skill:redesign-skill` skill, applied
+   selectively (its own audit flags things like "purple/blue AI gradient — replace it" and
+   "Lucide icons are the default AI choice" that are this app's actual, deliberate brand identity
+   used everywhere else — those were explicitly *not* applied, with reasoning). What did land in
+   `LandingPage.jsx`:
+   - The 5-feature grid (3-col, 5 items → an orphaned gap on the last row) rebuilt as an
+     asymmetric bento: the first feature (`featured: true`) spans 2 columns, filling every row
+     exactly at both the `sm` and `lg` breakpoints.
+   - Feature-card hover shadows tinted to each card's own accent color (`--feature-shadow` CSS
+     var + `hover:shadow-[...var(--feature-shadow)]`), matching the tinted-shadow treatment the
+     mockup/CTA button already used elsewhere on the same page.
+   - An accessibility batch: skip-to-content link, the page's hero/features/CTA wrapped in a real
+     `<main>`, the email input got a label/`autoComplete="email"`/`spellCheck={false}` and a
+     `focus-within` ring on its wrapping pill (replacing a bare `outline-none` with nothing to
+     replace it), `aria-live="polite"` on the error message, decorative icons marked
+     `aria-hidden`, both `h2`s got `text-balance`, "Start here" → "Get started free".
+   - Separately, this same page was also run through the plain `web-design-guidelines` skill
+     (not redesign-skill) earlier in the same conversation — a straight compliance audit,
+     findings reported in chat, not all applied at the time (the redesign-skill pass above
+     picked up the accessibility ones; superseded by it).
+7. **Progress page charts** — run through the `dataviz` skill. New file
+   `frontend/src/components/ProgressCharts.jsx`, wired into `ProgressPage.jsx` above the existing
+   `StatsPanel` (kept as-is — it already functions as the dataviz skill's required "table view"
+   equivalent for every number the charts visualize). `lib/stats.js` extended (backward-
+   compatible — `computeBestDay`/`computeBestTimeOfDay` now return `{best, distribution}`
+   internally but `computeStats()`'s public shape still exposes the same `habits.bestDay`/
+   `habits.bestTimeOfDay` StatsPanel already reads, plus new `habits.bestDayDistribution`/
+   `bestTimeDistribution`/`dailyActivity`) rather than duplicating the aggregation.
+   - Charts: a part-to-whole status bar (completed/on-track/overdue), a grouped weekly
+     created-vs-completed bar chart, a GitHub-style daily-activity heatmap that doubles as the
+     streak visual, and two "emphasis" bar charts (completions by day-of-week / time-of-day, the
+     best one highlighted). All hand-rolled SVG/HTML — no chart library was added, matching
+     `package.json` having none.
+   - **Palette**: the app's real pastel accents (`#8ec5fc`, `#f5c451`, `#ec4899`) failed the
+     skill's own validator (`node scripts/validate_palette.js`) for chart marks — too light/low-
+     chroma, though fine as backgrounds. Used deeper siblings for marks only (`#4f8ef7` — already
+     the app's own darker sibling of that blue, reused from `ConfettiBurst.jsx`'s palette — plus
+     `#e0417d`, `#c98500`), validated together as a 5-slot set at a specific order (swapping the
+     order reintroduces a colorblind-unsafe amber/green adjacent pair — see the comment at the
+     top of `ProgressCharts.jsx` for the exact validator command). "Completed" reuses the app's
+     real `#10b981` (same as every checkbox/badge) rather than a synthesized green.
+   - Corrects the "Known gaps" section further down this file ("Progress page is still just two
+     flat lists — no charts/streaks") — that line is now stale, left as-is per convention rather
+     than edited, flagged here instead.
+8. **Background-gradient experiment** — the authenticated app's shell background was swapped
+   from `bg-background` to the login page's own brand gradient in `App.jsx`, at explicit request
+   ("I want to see what that looks like, don't commit to it too hard"), then reverted back to
+   `bg-background` on the very next ask. Net effect: none — mentioned only so a diff of `App.jsx`
+   isn't a surprise if this ever gets re-requested (the one-line swap and its revert are both
+   already done and gone).
+
+**Verification standard across all of the above**: everything was checked live against a running
+`docker exec`'d backend + the worktree's own Vite dev server (not the shared checkout's) —
+`npm run lint`/`npm run build` clean after every change, screenshots plus targeted
+`getComputedStyle`/DOM assertions for the parts screenshots don't prove (focus states, hover
+shadows, the gradient-fill animation's one-shot behavior). All test accounts/data created for
+verification (a throwaway multi-subtask test task, a real signup through the full OTP flow, temp
+passwords on `demo`/`newsignup1`) were cleaned up afterward — `demo`'s password specifically gets
+reset to `set_unusable_password()` at the end of each of these sessions (a recurring point of
+confusion — see "Test login" below, and the fact that this exact conversation's whole opening ask
+was "what's the demo login" followed by "set it to TestPass123! again").
+
+**New testing-tool caveat**: the Browser pane's `scroll`/`scroll_to` actions occasionally landed
+the viewport far past the intended target (once, seemingly mid-scroll-animation, at a position
+showing a huge blank gap with the fixed NavBar oddly mid-page) — a `window.scrollTo(y)` via
+`javascript_exec` plus a fresh `screenshot` recovered every time. Confirmed via
+`document.body.scrollHeight`/`getBoundingClientRect` that the actual DOM/layout was never wrong,
+only the screenshot's captured scroll position — consistent with this file's existing "screenshot
+unreliable for scrolled/just-transitioned content" caveat, not a new class of bug. Also hit one
+transient `[vite] Failed to reload /src/components/LandingPage.jsx` HMR error mid-session with no
+underlying cause found (`npm run build` was clean immediately before and after) — a hard
+`navigate` with `force: true` recovered it immediately; if this recurs, that's the fix, not a
+real syntax error.
+
+## Test login — update
+The credentials this file previously documented
+(`demo@example.com` / `Demo12345!`) **no longer work** — `demo`'s actual password has been
+reset to unusable and back multiple times across sessions since (see just above). As of this
+exact conversation:
+```
+Username: demo
+Password: TestPass123!
+```
+Treat this as no more durable than any other line in this file — check `has_usable_password()`
+(`docker exec -w /app/backend flexmaster_web python manage.py shell -c "..."`, see this
+conversation's own transcript) before assuming it still works, and set it yourself if not:
+`u.set_password('TestPass123!'); u.save()`. This is a real, persistent account — only its
+password rotates.
+
+## graphify — status as of this note
+`graphify-out/` on disk (this worktree; also present, untracked, in the shared checkout) was
+last built **2026-08-27**, before every feature in the section above landed (all uncommitted
+since, so a graph rebuild wouldn't have seen any of it even if it were newer than that date
+suggests) — it does not reflect the current codebase. Running `/graphify` is a manual,
+on-request action (per the user's own global `~/.claude/CLAUDE.md`, it's triggered by typing
+`/graphify`, not run automatically by anything in this project or this file) — a new conversation
+only needs to run it if it actually wants an up-to-date graph for a graphify-driven query;
+plain code-editing work in this repo doesn't depend on it at all.

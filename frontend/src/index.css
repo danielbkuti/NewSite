@@ -265,15 +265,11 @@
 }
 
 /* --- ConfettiBurst (fireworks) ------------------------------------------
-   One shell = rise → flash → ring → sparks. All four run off the same
+   One shell = flash → ring → sparks, all firing immediately at the shell's
+   own delay (no rising trail beforehand — it read as a stray dot popping
+   up before the "explosion", not part of it). All three run off the same
    burst timestamp, so a shell reads as a single event. Custom properties
    are set inline per particle (deterministic, from the index). */
-@keyframes fw-rise {
-  0%   { transform: translateY(var(--from)) scaleY(1.5); opacity: 0; }
-  18%  { opacity: 1; }
-  82%  { opacity: 1; }
-  100% { transform: translateY(0) scaleY(0.6); opacity: 0; }
-}
 @keyframes fw-flash {
   0%   { transform: scale(0.2); opacity: 0.9; }
   100% { transform: scale(3.4); opacity: 0; }
@@ -415,8 +411,8 @@
    Same three-nested-layer technique as the fw-* keyframes above (outer =
    horizontal drift, middle = launch-then-gravity, core = tumble/shrink) —
    one element with a diagonal transform cannot make an arc. Shared by the
-   subtask row burst; the page-level fireworks reuse fw-rise/fw-flash/
-   fw-ring/fw-spark verbatim, already defined above. */
+   subtask row burst; the page-level fireworks reuse fw-flash/fw-ring/
+   fw-spark verbatim, already defined above. */
 @keyframes conf-x {
   to { transform: translateX(var(--dx)); }
 }
@@ -466,4 +462,34 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-badge-pulse-red,
   .animate-badge-pulse-ember { animation: none; }
+}
+
+/* --- Dashboard: welcome-name gradient fill --------------------------------
+   A one-shot wipe over the user's first name right after login: an
+   absolutely-positioned overlay copy of the name, painted in the brand
+   gradient via background-clip:text, revealed left-to-right over the
+   plain-color base copy sitting beneath it (Dashboard.jsx only mounts
+   this overlay when the render followed an actual login, so it never
+   replays on a later visit to /home). Same brand gradient literal as
+   .task-ring/.gradient-ring above. */
+.welcome-name-gradient {
+  background-image: linear-gradient(135deg, #e0c3fc 0%, #7c5fb0 50%, #8ec5fc 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  /* Safari ignores a plain `color: transparent` here and paints the
+     glyphs in their normal color on top of the clipped background —
+     needs the fill explicitly transparent too. */
+  -webkit-text-fill-color: transparent;
+}
+@keyframes welcome-name-fill {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+.animate-welcome-name-fill {
+  animation: welcome-name-fill 1400ms cubic-bezier(.4, 0, .2, 1) 250ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-welcome-name-fill { animation: none; }
 }
