@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { SignupProgress } from '@/components/SignupProgress'
@@ -8,10 +7,11 @@ import { Logo } from '@/components/Logo'
 import { checkEmailExists, startSignup } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
-// Step 1 of the multi-step signup flow — just an email. Step 2 (link
-// verification) happens on a different page entirely (/signup/verify/:token,
-// see SignupVerify.jsx), possibly on a different device, so this component's
-// job ends the moment the email is sent.
+// Step 1 of the multi-step signup flow — just an email. Step 2 (code
+// entry) happens on /signup/verify/:token (see SignupVerify.jsx) —
+// this component's job ends the moment the email is sent; it navigates
+// there itself with the token startSignup() hands back, rather than
+// requiring the user to open their inbox and click a link.
 export function SignupForm() {
   // Pre-filled when arriving from the landing page's email box, which
   // already checked this address is unrecognized — saves retyping it here.
@@ -21,7 +21,6 @@ export function SignupForm() {
   const [focused, setFocused] = useState(false)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -40,8 +39,9 @@ export function SignupForm() {
         return
       }
 
-      await startSignup(email)
-      setSubmitted(true)
+      const { token } = await startSignup(email)
+      navigate(`/signup/verify/${token}`)
+      return
     } catch (err) {
       // Fallback for the same "already exists" case if it somehow still
       // reaches startSignup (e.g. an account created between the check
@@ -56,35 +56,6 @@ export function SignupForm() {
     } finally {
       setSubmitting(false)
     }
-  }
-
-  if (submitted) {
-    return (
-      <Card className="w-full max-w-sm zoom-[1.125] border-transparent bg-[#f8f9fa] text-black shadow-2xl">
-        <CardContent className="flex flex-col gap-5 pt-6">
-          <SignupProgress currentStep="verify" />
-
-          <button
-            type="button"
-            onClick={() => setSubmitted(false)}
-            className="flex w-fit items-center gap-1 text-sm font-semibold text-sky-600 hover:underline"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Edit email
-          </button>
-
-          <div className="flex flex-col items-center gap-3 pt-2 text-center">
-            <Logo scale="secondary" />
-            <h2 className="text-2xl font-bold text-black">Check your email</h2>
-            <p className="text-sm text-black/70">
-              We&apos;ve sent a verification link to{' '}
-              <span className="font-semibold">{email}</span>. Click it to continue
-              creating your account.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    )
   }
 
   return (

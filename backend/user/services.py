@@ -28,26 +28,26 @@ def send_activation_email(user):
         'uid': uid,
         'token': token,
     })
-    send_mail('Activate your account', message, 'noreply@yourdomain.com', [user.email])
+    send_mail('Activate your account', message, settings.DEFAULT_FROM_EMAIL, [user.email])
 
 
 def send_signup_verification_email(pending_signup):
     """
-    Step 1 of the multi-step signup flow — emails the link that continues
-    it. Points at the React app's route (FRONTEND_URL), not this server's
-    own host, since verification here is handled entirely by the SPA
-    hitting a JSON endpoint, unlike the older activation-link flow above.
+    Step 1 of the multi-step signup flow — emails the 6-digit code that
+    continues it (SignupVerify.jsx collects this on the same page the
+    user is already on, rather than requiring them to open the email
+    and click a link). Called again on a "resend" — the caller
+    (signup_start_api) is what actually generates the fresh code before
+    this runs.
     """
-    verify_url = f"{settings.FRONTEND_URL}/signup/verify/{pending_signup.token}/"
-
     message = render_to_string('account/signup_verification_email.html', {
         'email': pending_signup.email,
-        'verify_url': verify_url,
+        'code': pending_signup.code,
     })
     send_mail(
-        'Verify your email to continue signing up',
+        'Your Fauxcus verification code',
         message,
-        'noreply@yourdomain.com',
+        settings.DEFAULT_FROM_EMAIL,
         [pending_signup.email],
     )
 
@@ -70,7 +70,7 @@ def send_password_reset_email(user):
         'user': user,
         'reset_url': reset_url,
     })
-    send_mail('Reset your Fauxcus password', message, 'noreply@yourdomain.com', [user.email])
+    send_mail('Reset your Fauxcus password', message, settings.DEFAULT_FROM_EMAIL, [user.email])
 
 
 def generate_username_from_name(first_name, last_name):

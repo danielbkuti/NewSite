@@ -51,12 +51,13 @@ function formatPercent(n) {
 }
 
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const TIME_BUCKETS = [
-  { label: 'Night (12–5am)', test: (h) => h < 5 },
-  { label: 'Morning (5–11am)', test: (h) => h >= 5 && h < 12 },
-  { label: 'Afternoon (12–5pm)', test: (h) => h >= 12 && h < 17 },
-  { label: 'Evening (5–9pm)', test: (h) => h >= 17 && h < 21 },
-  { label: 'Late night (9pm–12am)', test: (h) => h >= 21 },
+  { label: 'Night (12–5am)', short: 'Night', test: (h) => h < 5 },
+  { label: 'Morning (5–11am)', short: 'Morning', test: (h) => h >= 5 && h < 12 },
+  { label: 'Afternoon (12–5pm)', short: 'Afternoon', test: (h) => h >= 12 && h < 17 },
+  { label: 'Evening (5–9pm)', short: 'Evening', test: (h) => h >= 17 && h < 21 },
+  { label: 'Late night (9pm–12am)', short: 'Late night', test: (h) => h >= 21 },
 ]
 
 function computeStreaks(completions) {
@@ -90,26 +91,53 @@ function computeStreaks(completions) {
   return { currentStreak, longestStreak }
 }
 
+// Returns both the single "best" (for the plain-text stat row) and the
+// full 7-bucket distribution (for the bar chart) — one pass over
+// `completions` instead of computing the breakdown twice.
 function computeBestDay(completions) {
-  if (completions.length === 0) return null
   const counts = new Array(7).fill(0)
   for (const c of completions) counts[c.date.getDay()] += 1
-  const best = counts.reduce((bi, c, i) => (c > counts[bi] ? i : bi), 0)
-  if (counts[best] === 0) return null
-  return { day: WEEKDAY_LABELS[best], count: counts[best] }
+  const distribution = counts.map((count, i) => ({ label: WEEKDAY_SHORT[i], count }))
+  if (completions.length === 0) return { best: null, distribution }
+  const bestIndex = counts.reduce((bi, c, i) => (c > counts[bi] ? i : bi), 0)
+  if (counts[bestIndex] === 0) return { best: null, distribution }
+  return { best: { day: WEEKDAY_LABELS[bestIndex], count: counts[bestIndex] }, distribution }
 }
 
 function computeBestTimeOfDay(completions) {
-  if (completions.length === 0) return null
   const counts = TIME_BUCKETS.map(() => 0)
   for (const c of completions) {
     const hour = c.date.getHours()
     const idx = TIME_BUCKETS.findIndex((b) => b.test(hour))
     counts[idx] += 1
   }
-  const best = counts.reduce((bi, c, i) => (c > counts[bi] ? i : bi), 0)
-  if (counts[best] === 0) return null
-  return { label: TIME_BUCKETS[best].label, count: counts[best] }
+  const distribution = counts.map((count, i) => ({ label: TIME_BUCKETS[i].short, count }))
+  if (completions.length === 0) return { best: null, distribution }
+  const bestIndex = counts.reduce((bi, c, i) => (c > counts[bi] ? i : bi), 0)
+  if (counts[bestIndex] === 0) return { best: null, distribution }
+  return { best: { label: TIME_BUCKETS[bestIndex].label, count: counts[bestIndex] }, distribution }
+}
+
+// Daily completion counts for the last `days` calendar days (today
+// inclusive), oldest first — backs the GitHub-style activity heatmap.
+// Deliberately walks calendar days rather than just the sparse
+// `dayKeys` a streak needs, so empty days render as real zero-count
+// cells instead of being skipped.
+function computeDailyActivity(completions, days = 84) {
+  const countByDay = new Map()
+  for (const c of completions) {
+    const key = localDateKey(c.date)
+    countByDay.set(key, (countByDay.get(key) ?? 0) + 1)
+  }
+
+  const today = startOfDay(new Date())
+  const out = []
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(today.getTime() - i * DAY_MS)
+    const key = localDateKey(date)
+    out.push({ date, count: countByDay.get(key) ?? 0 })
+  }
+  return out
 }
 
 // Monday-start weeks, oldest to newest, `weekCount` of them ending on
@@ -206,12 +234,19 @@ export function computeStats(tasks) {
     },
     rolling: { last7, last30 },
     weekly: computeWeeklyActivity(tasks),
-    habits: {
-      currentStreak,
-      longestStreak,
-      bestDay: computeBestDay(completions),
-      bestTimeOfDay: computeBestTimeOfDay(completions),
-    },
+    habits: (() => {
+      const day = computeBestDay(completions)
+      const time = computeBestTimeOfDay(completions)
+      return {
+        currentStreak,
+        longestStreak,
+        bestDay: day.best,
+        bestDayDistribution: day.distribution,
+        bestTimeOfDay: time.best,
+        bestTimeDistribution: time.distribution,
+        dailyActivity: computeDailyActivity(completions),
+      }
+    })(),
   }
 }
 

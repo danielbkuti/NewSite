@@ -219,4 +219,4 @@ Docker ensures a consistent development environment and simplifies dependency ma
 
 # License
 
-This project is for educational and portfolio purposes.
+MIT — see [LICENSE](LICENSE). Built for educational and portfolio purposes.

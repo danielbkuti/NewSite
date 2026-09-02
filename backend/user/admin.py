@@ -9,8 +9,8 @@ class CustomUserAdmin(UserAdmin):
 
 
 class PendingSignupAdmin(admin.ModelAdmin):
-    list_display = ('email', 'email_verified', 'username', 'created_at')
-    readonly_fields = ('token', 'created_at')
+    list_display = ('email', 'email_verified', 'code', 'code_attempts', 'username', 'created_at')
+    readonly_fields = ('token', 'code', 'code_sent_at', 'created_at')
 
 
 admin.site.register(CustomUser, CustomUserAdmin)

@@ -663,10 +663,10 @@ export function TaskDetailPage() {
           </div>
         )}
 
-        <div className="relative z-[2] grid grid-cols-[246px_1fr] items-start">
+        <div className="relative z-[2] grid grid-cols-1 items-start md:grid-cols-[246px_1fr]">
           {/* ---------------------------------------------------------- Left rail */}
           <div
-            className="flex flex-col gap-5 self-stretch border-r px-5 py-[22px]"
+            className="flex flex-col gap-5 self-stretch border-b px-5 py-[22px] md:border-r md:border-b-0"
             style={{
               background: 'linear-gradient(180deg,rgba(255,255,255,.82),rgba(255,255,255,.5))',
               borderColor: theme.hairline,

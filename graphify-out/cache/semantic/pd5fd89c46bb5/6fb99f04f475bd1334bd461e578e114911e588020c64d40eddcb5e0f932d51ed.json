@@ -1,1 +1,0 @@
-{"nodes": [{"id": "backend_user_templates_account_signup_verification_email", "label": "Signup Verification Email Template", "file_type": "code", "source_file": "backend/user/templates/account/signup_verification_email.html", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

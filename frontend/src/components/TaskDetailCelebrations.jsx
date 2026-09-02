@@ -3,14 +3,14 @@
 // subtask row, five-shell fireworks across the whole page shell when
 // the task itself is marked complete, and an independent one-shot
 // colour wash that fires on both complete and reopen. Deliberately a
-// separate component from the card-scale `ConfettiBurst` (currently
-// disabled app-wide, see its own file) rather than a shared one — the
-// geometry, emitter counts, and page-vs-row overlay placement are all
-// different, and this page's fireworks/confetti aren't gated behind
-// that flag. Everything here is deterministic per index (no
-// `Math.random()`) so a re-render never re-randomises a burst
-// mid-flight, and every overlay respects `prefers-reduced-motion` by
-// not rendering at all rather than playing a shortened version.
+// separate component from the card-scale `ConfettiBurst` (see its own
+// file) rather than a shared one — the geometry, emitter counts, and
+// page-vs-row overlay placement are all different, and this page's
+// fireworks/confetti aren't gated behind that flag. Everything here is
+// deterministic per index (no `Math.random()`) so a re-render never
+// re-randomises a burst mid-flight, and every overlay respects
+// `prefers-reduced-motion` by not rendering at all rather than playing
+// a shortened version.
 
 function reducedMotion() {
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -25,8 +25,8 @@ function degToRad(deg) {
 // celebration must not read as another status colour.
 const FW_COLORS = ['#8ec5fc', '#4f8ef7', '#f9a8d4', '#ec4899', '#c7dcff', '#e0c3fc', '#fde68a', '#7c5fb0']
 
-// Five shells sweeping the page (a card used three) so a full-page
-// completion feels bigger than a card's.
+// Five shells sweeping the page (a card also uses five, tighter
+// together) so a full-page completion feels bigger than a card's.
 const FW_EMITTERS = [
   { left: '14%', top: '34%', delay: 0, scale: 1.0 },
   { left: '38%', top: '18%', delay: 220, scale: 1.25 },
@@ -35,7 +35,6 @@ const FW_EMITTERS = [
   { left: '48%', top: '52%', delay: 880, scale: 0.9 },
 ]
 
-const FW_RISE_MS = 340
 const FW_SPARK_COUNT = 26
 const FW_SPARK2_COUNT = 12
 
@@ -82,23 +81,13 @@ function fwInnerSparkStyle(i, scale, burstAt) {
   }
 }
 
+// No rising trail before the burst — it read as a stray dot appearing
+// a beat before the "explosion" rather than part of it. Fires straight
+// to flash → ring → sparks at `em.delay`.
 function FireworkShell({ em, e }) {
-  const burstAt = em.delay + FW_RISE_MS
+  const burstAt = em.delay
   return (
     <div className="absolute" style={{ left: em.left, top: em.top, width: 0, height: 0 }}>
-      <span
-        className="absolute rounded-[2px] bg-white"
-        style={{
-          left: '-1.5px',
-          top: 0,
-          width: '3px',
-          height: '10px',
-          boxShadow: '0 0 10px 3px #f9a8d4',
-          transformOrigin: 'bottom',
-          '--from': `${120 * em.scale}px`,
-          animation: `fw-rise ${FW_RISE_MS}ms ease-out ${em.delay}ms forwards`,
-        }}
-      />
       <span
         className="absolute rounded-full"
         style={{
@@ -108,6 +97,11 @@ function FireworkShell({ em, e }) {
           height: `${34 * em.scale}px`,
           background:
             'radial-gradient(circle, #fff 0%, rgba(249,168,212,.8) 38%, rgba(142,197,252,.35) 60%, rgba(142,197,252,0) 76%)',
+          // Explicit resting opacity — without it the shape sits here at
+          // full (unanimated) size/opacity for the whole `burstAt` delay,
+          // reading as a little circle before it "explodes". Same fix as
+          // the spark styles below (they already set opacity: 0 inline).
+          opacity: 0,
           animation: `fw-flash 520ms ease-out ${burstAt}ms forwards`,
         }}
       />
@@ -119,6 +113,7 @@ function FireworkShell({ em, e }) {
           width: `${190 * em.scale}px`,
           height: `${190 * em.scale}px`,
           border: '3px solid rgba(236,72,153,.6)',
+          opacity: 0,
           animation: `fw-ring 760ms cubic-bezier(.2,.7,.3,1) ${burstAt}ms forwards`,
         }}
       />
@@ -152,13 +147,21 @@ export function TaskFireworks() {
 // burst still separates from the emerald row it lands on.
 const CONF_COLORS = ['#56a456', '#7c5fb0', '#8ec5fc', '#e0c3fc', '#f5c451', '#34d399', '#f9a8d4']
 
-// Two emitters: off the checkbox, and mid-row. ~half the card burst's
-// reach, so it stays a row-scale event.
+// Four emitters spread left-to-right across the row — off the
+// checkbox, then three more spaced out toward the due-date badge — so
+// the burst sweeps the whole row instead of clustering near the
+// checkbox. Percentage lefts (not fixed px) so the spread actually
+// scales with the row's real width instead of capping out ~290px in
+// from the left edge on any row wider than that. Each still scaled
+// well below the card burst's reach, so it reads as a row-scale event,
+// not a card-scale one.
 const CONF_EMITTERS = [
-  { left: 19, top: '50%', delay: 0, bias: 0.35, scale: 0.52 },
-  { left: 120, top: '50%', delay: 90, bias: -0.3, scale: 0.46 },
+  { left: '4%', top: '50%', delay: 0, bias: 0.35, scale: 0.48 },
+  { left: '34%', top: '50%', delay: 70, bias: -0.25, scale: 0.42 },
+  { left: '64%', top: '50%', delay: 140, bias: 0.3, scale: 0.44 },
+  { left: '94%', top: '50%', delay: 210, bias: -0.35, scale: 0.4 },
 ]
-const CONF_PER_EMITTER = 14 // 28 pieces total
+const CONF_PER_EMITTER = 10 // 40 pieces total
 
 function confPieceGeometry(i, e, em) {
   const t = i / (CONF_PER_EMITTER - 1)
@@ -229,7 +232,7 @@ export function SubtaskConfetti() {
   return (
     <div className="task-detail-confetti pointer-events-none absolute inset-0 z-[6]" aria-hidden="true">
       {CONF_EMITTERS.map((em, e) => (
-        <div key={e} className="absolute" style={{ left: `${em.left}px`, top: em.top }}>
+        <div key={e} className="absolute" style={{ left: em.left, top: em.top }}>
           {Array.from({ length: CONF_PER_EMITTER }).map((_, i) => (
             <ConfettiPiece key={i} i={i} e={e} em={em} />
           ))}

@@ -174,7 +174,17 @@ EMAIL_PORT = 587                             # 587 is standard for TLS
 EMAIL_USE_TLS = True                         # Use Transport Layer Security
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = 'Task Manager <pantheraleo440@gmail.com>'
+# The address itself has to stay this real Gmail account (EMAIL_HOST_USER,
+# above) — Gmail's SMTP relay silently discards a From header whose address
+# isn't the authenticated account or a verified "Send As" alias on it, and
+# falls back to that account's own default sender identity. Every send_mail()
+# call must use this constant (not a made-up 'noreply@...' string) so the
+# display name actually shows "Fauxcus" instead of the account owner's name.
+# To send from a real Fauxcus-owned address instead of this personal Gmail,
+# either add that address as a verified alias in this Gmail account's "Send
+# mail as" settings, or switch EMAIL_BACKEND to a transactional provider
+# (SendGrid/Mailgun/SES/etc.) with its own verified sending domain.
+DEFAULT_FROM_EMAIL = 'Fauxcus <pantheraleo440@gmail.com>'
 #
 # ACCOUNT_LOGIN_METHODS = {'email'}
 # ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
