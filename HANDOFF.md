@@ -16,6 +16,14 @@ mid-session, or the branch not being `main`, isn't necessarily a sign
 something's wrong. Read the current state before assuming anything's
 broken, and treat this file as a snapshot, not a live view.
 
+**Also run `/graphify .` from `/Users/flexduck/Projects/flexmaster` early in a new
+session** — `graphify-out/` was deleted (it's gitignored, untracked) as part of
+landing the work in the section below ("Digit-code signup, landing page
+redesign..."), so there's currently no graph at all, not just a stale one. No API
+key needed (code-only corpus, AST-extracted). Confirm it worked:
+`ls graphify-out/graph.json graphify-out/GRAPH_REPORT.md`, then a real query like
+`/graphify query "How does the signup flow work?"`.
+
 ## Response style
 User wants short replies. No filler words ("the", "is", "am", "are").
 3-6 word sentences. Direct answers only. Run tools first, show result,
@@ -1294,6 +1302,26 @@ transient `[vite] Failed to reload /src/components/LandingPage.jsx` HMR error mi
 underlying cause found (`npm run build` was clean immediately before and after) — a hard
 `navigate` with `force: true` recovered it immediately; if this recurs, that's the fix, not a
 real syntax error.
+
+## Correction to "Digit-code signup, landing page redesign..." above — this conversation
+That section's own heading still says "all still uncommitted" and describes a ~1000-line
+uncommitted diff sitting in `worktree-graphify-setup` — **stale as of right now**. Checked
+directly rather than assumed: that worktree's working tree is clean (`git status` — nothing to
+commit), and its `HEAD` (`288156c`, "Digit-code signup, landing page redesign, Progress charts,
+Dashboard polish") is a confirmed ancestor of `main`
+(`git merge-base --is-ancestor HEAD main` passed) — `main`/`origin/main` are at `4f5342f`, a
+`Merge branch 'worktree-graphify-setup'` commit that already contains it. Some other session
+committed and merged it after that section was written, without updating the section's own
+"all still uncommitted" framing.
+
+Also confirmed **not** still a risk: the section flagged migration
+`0005_pendingsignup_code_pendingsignup_code_attempts_and_more.py` as existing only untracked in
+that worktree and not applied to the live dev DB. `showmigrations user` against the running
+container now shows all five migrations `[X]` applied, `0005` included — in sync with what's on
+`main`. The digit-code signup feature is live and its DB state matches its code.
+
+Leaving the section above as-is per this file's own convention (append, don't rewrite another
+session's account) — this note is the correction to trust instead.
 
 ## Test login — update
 The credentials this file previously documented
