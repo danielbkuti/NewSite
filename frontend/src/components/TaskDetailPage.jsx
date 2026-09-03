@@ -563,10 +563,17 @@ export function TaskDetailPage() {
   // does take priority over the calm default and, since an overdue
   // subtask is worse than the task merely being due soon, over the
   // task's own due-soon banner too. Deliberately not tinted by
-  // STATE_THEME — this is a fixed purple "something inside needs a
-  // look" colour, distinct from the page's own true state, so it never
-  // gets confused for that state's own real deadline.
+  // STATE_THEME — these are fixed colours distinct from the page's own
+  // true state, so neither gets confused for that state's own real
+  // deadline. Two different fixed colours, not one: overdue stays the
+  // established purple "something inside needs a look" alert, but a
+  // merely-due-soon subtask gets its own amber — same amber hue
+  // (#b45309) every other "set a deadline"-adjacent control in the app
+  // already uses, distinct from both the purple overdue-subtask alert
+  // and STATE_THEME['due-soon']'s own ember/red-orange (that one's for
+  // the *task's own* deadline, not a subtask's).
   const SUBTASK_ALERT_BANNER = 'linear-gradient(90deg,#6b46a8,#4f7fd4)'
+  const SUBTASK_DUE_SOON_BANNER = 'linear-gradient(90deg,#b45309,#f59e0b)'
   let bannerCopy = null
   let bannerAction = null
   let bannerBackground = theme.banner
@@ -592,7 +599,7 @@ export function TaskDetailPage() {
       dueSoonSubtasks.length === 1
         ? `"${dueSoonSubtasks[0].name}" is due soon`
         : `${pluralize(dueSoonSubtasks.length, 'subtask')} are due soon`
-    bannerBackground = SUBTASK_ALERT_BANNER
+    bannerBackground = SUBTASK_DUE_SOON_BANNER
     BannerGlyph = Hourglass
     bannerGlyphDurationMs = 2400
   } else if (stateKey === 'completed') {
@@ -1515,7 +1522,14 @@ function SubtaskFlipList({ subtasks, children }) {
 
     const newRects = new Map()
     nodeRefs.current.forEach((el, id) => {
-      if (el) newRects.set(id, el.getBoundingClientRect().top)
+      // + window.scrollY makes this document-relative rather than
+      // viewport-relative — getBoundingClientRect().top alone shifts by
+      // the scroll distance on every scroll, even though nothing
+      // actually reordered, so a re-render that lands mid-scroll (e.g.
+      // a live-ticking countdown elsewhere) would compute a huge fake
+      // "delta" for every row and fly them all across the screen trying
+      // to animate a move that never happened.
+      if (el) newRects.set(id, el.getBoundingClientRect().top + window.scrollY)
     })
 
     nodeRefs.current.forEach((el, id) => {

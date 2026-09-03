@@ -177,7 +177,7 @@ function UpcomingRow({ item, celebrating, onToggle }) {
               ? 'bg-red-700 text-white'
               : isUrgent
                 ? 'bg-red-50 text-red-700'
-                : 'bg-amber-50 text-amber-700'
+                : 'bg-[#f3e8ff] text-[#6b46a8]'
           )}
         >
           {isOverdue ? 'Overdue' : isUrgent ? `Due in: ${countdownDisplay}` : formatDeadline(item.dateDeadline)}
