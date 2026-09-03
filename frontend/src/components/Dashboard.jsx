@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { SquarePlus, Target, CalendarDays, Sparkles, Flame } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { TaskFeaturePreview } from '@/components/TaskFeaturePreview'
 import { PulseRing } from '@/components/PulseRing'
 import { cn } from '@/lib/utils'
 import { useDeadlineStatus } from '@/hooks/useDeadlineStatus'
@@ -47,32 +46,58 @@ const CELEBRATION_MS = 1300
 // One of the three equal-width square shortcuts under the welcome
 // message. `accent` drives both the icon badge color and the soft
 // blurred glow tucked behind it — each card gets its own color so the
-// row doesn't read as three identical boxes.
-function ActionCard({ to, icon: Icon, title, description, accent, preview }) {
-  // Local hover state, separate from the `group`/`group-hover` CSS
-  // already driving this card's own lift/glow/icon-scale — those stay
-  // pure CSS, but the preview needs real JS state to drive its scene
-  // timer, so it gets its own onMouseEnter/Leave.
-  const [hovered, setHovered] = useState(false)
+// row doesn't read as three identical boxes. `video` (currently just
+// the "Start a new task" card) plays a silent, looping clip behind the
+// icon/title/description — always on, not hover-gated, since the point
+// is ambient motion in the background rather than a preview you have
+// to trigger. Replaces the old hover-triggered TaskFeaturePreview scene
+// cycler entirely (removed, along with its now-unused component file).
+function ActionCard({ to, icon: Icon, title, description, accent, video }) {
+  const videoRef = useRef(null)
+
+  // Belt-and-suspenders on top of the `autoPlay` attribute — most
+  // browsers honor a muted+autoPlay video without any JS involved, but
+  // it's not universal (some mobile browsers, some embedded/automated
+  // contexts), and an explicit `.play()` call costs nothing when it
+  // wasn't needed. Rejection is silently swallowed rather than
+  // surfaced — a background decoration failing to play isn't worth an
+  // error, the card still reads fine with it just sitting on its first
+  // frame.
+  useEffect(() => {
+    videoRef.current?.play().catch(() => {})
+  }, [])
 
   return (
-    <Link
-      to={to}
-      className="group block"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
+    <Link to={to} className="group block">
       <Card className="relative aspect-square overflow-hidden p-5 shadow-sm transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
         <div
           className="pointer-events-none absolute -top-8 -right-8 size-28 rounded-full opacity-20 blur-2xl transition-opacity duration-200 group-hover:opacity-35"
           style={{ backgroundColor: accent }}
         />
-        <div
-          className={cn(
-            'relative flex h-full flex-col justify-between transition-opacity duration-200',
-            preview && hovered && 'opacity-0'
-          )}
-        >
+
+        {/* Anchored to the bottom-right corner and rotated rather than
+            placed flat — reads as a diagonal sweep of motion rather
+            than a literal video rectangle. Kept deliberately faint
+            (18% opacity, no controls/sound) so it stays texture behind
+            the card's own content instead of competing with it — the
+            card's `overflow-hidden` clips whatever spills past its
+            rounded corners. */}
+        {video && (
+          <video
+            ref={videoRef}
+            aria-hidden="true"
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="pointer-events-none absolute -right-12 -bottom-12 h-[90%] w-[90%] origin-bottom-right object-cover opacity-[0.18]"
+            style={{ transform: 'rotate(-28deg)' }}
+          >
+            <source src={video} type="video/mp4" />
+          </video>
+        )}
+
+        <div className="relative flex h-full flex-col justify-between">
           <div
             className="flex size-11 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110"
             style={{ backgroundColor: `${accent}1a`, color: accent }}
@@ -84,17 +109,6 @@ function ActionCard({ to, icon: Icon, title, description, accent, preview }) {
             <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         </div>
-
-        {preview && (
-          <div
-            className={cn(
-              'absolute inset-0 flex items-center justify-center transition-opacity duration-200',
-              hovered ? 'opacity-100' : 'pointer-events-none opacity-0'
-            )}
-          >
-            <TaskFeaturePreview active={hovered} />
-          </div>
-        )}
       </Card>
     </Link>
   )
@@ -322,7 +336,7 @@ export function Dashboard({ firstName, username, justLoggedIn, onWelcomeSeen }) 
           title="Start a new task"
           description="Add something to your list and track it through to done."
           accent="#56a456"
-          preview
+          video="/0902.mp4"
         />
         <ActionCard
           to="/goals"
