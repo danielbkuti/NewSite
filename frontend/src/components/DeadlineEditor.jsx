@@ -9,13 +9,18 @@ import { cn } from '@/lib/utils'
 const EDGE_GAP = 8
 
 const DAY_MS = 24 * 60 * 60 * 1000
-// Wheel range: 90 days back (room to backdate/correct) to a year
-// ahead — same bounds the old single date wheel enforced, just now
-// expressed as a min/max Date the day/month/year wheels are each kept
-// inside of (see buildDayItems/buildMonthItems/buildYearItems below)
-// rather than one linear offset.
+// Wheel range: 90 days back (room to backdate/correct) to 10 years
+// ahead by default — expressed as a min/max Date the day/month/year
+// wheels are each kept inside of (see buildDayItems/buildMonthItems/
+// buildYearItems below) rather than one linear offset. The backend
+// itself has no upper bound on dateDeadline at all (only "not in the
+// past" for a task) — this was a UI-only cap, previously a single
+// year, which is fine for a task but too tight for anything long-range
+// (a goal's target date, say). Both bounds are overridable per call
+// site — see `minDayOffset`/`maxDayOffset` below — this default just
+// needs to be generous rather than exactly right for every future use.
 const MIN_DAY_OFFSET = -90
-const MAX_DAY_OFFSET = 365
+const MAX_DAY_OFFSET = 3650
 
 function pad2(n) {
   return String(n).padStart(2, '0')
@@ -88,22 +93,35 @@ const PERIOD_ITEMS = [
 // *subtask* deadline — but a *task* deadline is rejected outright if
 // it's in the past (even resubmitting an already-past one unchanged),
 // so both task-level call sites pass `minDayOffset={0}` to keep the
-// wheels from ever landing on a value Save can't possibly accept. The
-// day/month/year wheels enforce this by construction — their item
-// lists are built from `minDate`/`maxDate` and narrow at the boundary
-// years/months (see buildDayItems/buildMonthItems) — so every
-// selectable combination is already in range; there's nothing left to
-// clamp at Save time the way the old single offset wheel needed to.
+// wheels from ever landing on a value Save can't possibly accept.
+// `maxDayOffset` is the same idea for the far end — defaults to a
+// generous 10 years (MAX_DAY_OFFSET) since the backend enforces no
+// upper bound at all; a call site with its own, tighter or wider,
+// sense of "how far out is reasonable" (a goal's target date, say)
+// can override it the same way. The day/month/year wheels enforce
+// both bounds by construction — their item lists are built from
+// `minDate`/`maxDate` and narrow at the boundary years/months (see
+// buildDayItems/buildMonthItems) — so every selectable combination is
+// already in range; there's nothing left to clamp at Save time the
+// way the old single offset wheel needed to.
 // Time-of-day isn't similarly bounded (same as before): picking a time
 // earlier than "now" on today's date just surfaces the backend's own
 // validation error, exactly like it always has.
-export function DeadlineEditor({ anchorRef, value, onSave, onCancel, className, minDayOffset = MIN_DAY_OFFSET }) {
+export function DeadlineEditor({
+  anchorRef,
+  value,
+  onSave,
+  onCancel,
+  className,
+  minDayOffset = MIN_DAY_OFFSET,
+  maxDayOffset = MAX_DAY_OFFSET,
+}) {
   const initial = value ? new Date(value) : new Date()
   const initialHasTime = Boolean(value) && (initial.getHours() !== 0 || initial.getMinutes() !== 0)
 
   const today = startOfLocalDay(new Date())
   const minDate = addDays(today, minDayOffset)
-  const maxDate = addDays(today, MAX_DAY_OFFSET)
+  const maxDate = addDays(today, maxDayOffset)
 
   function clampToRange(date) {
     if (date < minDate) return minDate
@@ -373,14 +391,16 @@ export function DeadlineEditor({ anchorRef, value, onSave, onCancel, className, 
       ) : (
       <div className="mt-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {/* Yellow, matching the amber "Due ..." badge this editor
-              opens from everywhere it's used — reads as "this is the
-              deadline action" rather than a plain text link. */}
+          {/* Soft purple, matching the app's established "set/change a
+              deadline" pair (#f3e8ff/#6b46a8) — reads as "this is the
+              deadline action" rather than a plain text link. Used to be
+              amber here, before that convention moved to purple
+              everywhere else this editor opens from. */}
           <button
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-60"
+            className="rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-medium text-[#6b46a8] transition-colors hover:bg-[#e9d5ff] disabled:opacity-60"
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
