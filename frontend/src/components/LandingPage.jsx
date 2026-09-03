@@ -304,7 +304,14 @@ export function LandingPage() {
       {/* ---- header ---- */}
       <header className="sticky top-0 z-50 border-b border-black/5 bg-white/70 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Logo scale="secondary" />
+          {/* This page only ever renders when logged out (App.jsx
+              redirects an authenticated visitor away from / entirely),
+              so linking to / here is a same-page no-op — kept anyway
+              for consistency with every other Logo instance in the app,
+              all of which are real links. */}
+          <Link to="/" aria-label="Fauxcus home">
+            <Logo scale="secondary" />
+          </Link>
           <nav className="flex items-center gap-3">
             <Link
               to="/login"

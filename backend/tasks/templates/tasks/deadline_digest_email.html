@@ -1,0 +1,10 @@
+{% autoescape off %}Hi {{ user.first_name|default:user.username }},
+
+Here's what's due in the next 24 hours on Fauxcus:
+
+{% for item in items %}- {{ item.name }}{% if item.kind == "subtask" %} (part of "{{ item.task_name }}"){% endif %} — due {{ item.dateDeadline|date:"M j, Y, g:i A" }}
+{% endfor %}
+Open Fauxcus to review or reschedule: {{ frontend_url }}
+
+You're getting this because these items are close to their deadline. This is a one-time reminder per deadline — rescheduling one resets it.
+{% endautoescape %}

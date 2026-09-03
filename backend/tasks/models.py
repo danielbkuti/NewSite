@@ -111,6 +111,14 @@ class Task(models.Model):
     # is reopened, so it always reflects the most recent completion
     # rather than the first one.
     dateCompleted = models.DateTimeField(null=True, blank=True)
+    # When send_deadline_digest last included this task in a digest —
+    # None means "not yet reminded about its current deadline". Reset
+    # back to None in save() whenever dateDeadline actually changes (see
+    # below), so rescheduling a task makes it eligible for a fresh
+    # reminder instead of staying silently skipped because the
+    # *previous* deadline already got one. Never set anywhere except by
+    # that command.
+    reminderSentAt = models.DateTimeField(null=True, blank=True)
 
     status = models.CharField(
         max_length=20,
@@ -125,7 +133,8 @@ class Task(models.Model):
     def save(self, *args, **kwargs):
         """See _sync_date_completed. Also logs a TaskActivity row for
         creation and for any tracked field actually changing — see
-        _log_task_changes."""
+        _log_task_changes. Also clears reminderSentAt when dateDeadline
+        actually changes — see that field's own comment above."""
         _sync_date_completed(self, Task, kwargs)
         created = self.pk is None
         before = (
@@ -133,6 +142,11 @@ class Task(models.Model):
             if created
             else Task.objects.filter(pk=self.pk).values("name", "completed", "dateDeadline").first()
         )
+        if before is not None and before["dateDeadline"] != self.dateDeadline:
+            self.reminderSentAt = None
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None:
+                kwargs["update_fields"] = list(update_fields) + ["reminderSentAt"]
         super().save(*args, **kwargs)
         _log_task_changes(self, before, created)
 
@@ -222,6 +236,8 @@ class SubTask(models.Model):
     # sort completed subtasks by when each was actually finished
     # (most-recent first) instead of losing that ordering entirely.
     dateCompleted = models.DateTimeField(null=True, blank=True)
+    # Same rules and purpose as Task.reminderSentAt above.
+    reminderSentAt = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         """
@@ -231,7 +247,9 @@ class SubTask(models.Model):
         tracked field actually changing (see _log_subtask_changes) —
         deliberately outside the atomic block below so a failure
         writing the log entry (it never should, but) can't roll back an
-        otherwise-successful save.
+        otherwise-successful save. Also clears reminderSentAt when
+        dateDeadline actually changes — see Task.save()'s identical
+        handling for why.
         """
         _sync_date_completed(self, SubTask, kwargs)
         created = self.pk is None
@@ -240,6 +258,11 @@ class SubTask(models.Model):
             if created
             else SubTask.objects.filter(pk=self.pk).values("name", "completed", "dateDeadline").first()
         )
+        if before is not None and before["dateDeadline"] != self.dateDeadline:
+            self.reminderSentAt = None
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None:
+                kwargs["update_fields"] = list(update_fields) + ["reminderSentAt"]
         with transaction.atomic():
             super().save(*args, **kwargs)
             self.task.update_completion_status()
@@ -247,3 +270,37 @@ class SubTask(models.Model):
 
     def __str__(self):
         return f"{self.name} (Subtask of {self.task.name})"
+
+
+class Notification(models.Model):
+    """
+    In-app (and, via the same digest run, email) notifications for a
+    user. Currently the only write path is send_deadline_digest (a
+    management command, see tasks/management/commands/) — one row per
+    task/subtask a given day's digest included — never written to
+    directly by a view or serializer. A separate model from
+    TaskActivity rather than folded into it: TaskActivity is scoped to
+    one task's own history and has no read/unread state; a notification
+    belongs to a *user* across all their tasks and needs exactly that.
+    `task`/`subtask` are nullable and independent (never both set) so
+    the same model covers a reminder about the task itself or one of
+    its subtasks; both use SET_NULL rather than CASCADE so deleting the
+    task/subtask later leaves the notification's own history intact
+    instead of silently vanishing it.
+    """
+
+    user = models.ForeignKey("user.CustomUser", related_name="notifications", on_delete=models.CASCADE)
+    task = models.ForeignKey(Task, related_name="notifications", on_delete=models.SET_NULL, null=True, blank=True)
+    subtask = models.ForeignKey(SubTask, related_name="notifications", on_delete=models.SET_NULL, null=True, blank=True)
+    message = models.CharField(max_length=255)
+    dateCreated = models.DateTimeField(auto_now_add=True)
+    read = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-dateCreated"]
+        indexes = [
+            models.Index(fields=["user", "read"]),
+        ]
+
+    def __str__(self):
+        return self.message
