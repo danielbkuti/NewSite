@@ -493,3 +493,30 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-welcome-name-fill { animation: none; }
 }
+
+/* Task list cards slide in from the left the first time they scroll into
+   view (see useScrollReveal.js) — .card-reveal is the resting "not yet
+   revealed" state, .card-reveal-visible is added by JS on first
+   intersection. Transform + opacity only, so this stays on the
+   compositor thread rather than triggering layout/paint on every frame. */
+.card-reveal {
+  opacity: 0;
+  transform: translateX(-40px);
+  transition: opacity 350ms ease-out, transform 350ms ease-out;
+}
+.card-reveal-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Belt-and-suspenders: useScrollReveal already gates itself off at
+     mount time under reduced motion (so .card-reveal is never even
+     applied), but this covers a viewer who toggles the OS setting after
+     the page has already loaded, without a reload. */
+  .card-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

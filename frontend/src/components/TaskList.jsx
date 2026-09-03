@@ -6,6 +6,7 @@ import { OverdueGateModal, collectOverdueItems } from '@/components/OverdueGateM
 import { Button } from '@/components/ui/button'
 import { updateTask, deleteTask, createSubTask, updateSubTask, deleteSubTask } from '@/lib/tasks'
 import { useTaskStore } from '@/context/TaskStoreContext'
+import { useScrollReveal } from '@/hooks/useScrollReveal'
 import { cn, UPCOMING_WINDOW_MS } from '@/lib/utils'
 
 // "Due date" is the only sort with buckets and promoted subtasks —
@@ -109,6 +110,13 @@ export function TaskList() {
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false)
+
+  // Cards slide in from the left the first time they scroll into view —
+  // see useScrollReveal for the mechanics. `enabled` is false (and the
+  // wrapper below renders with no reveal classes at all, fully visible
+  // from the start) under reduced motion or without IntersectionObserver
+  // support.
+  const { registerCard, enabled: revealEnabled } = useScrollReveal()
 
   useEffect(() => {
     if (status !== 'ready' || overdueCheckedRef.current) return
@@ -350,23 +358,28 @@ export function TaskList() {
 
   function renderCard(task) {
     return (
-      <TaskCard
+      <div
         key={`task-${task.id}`}
-        task={task}
-        celebrating={celebratingIds.has(task.id)}
-        onToggleComplete={handleToggle}
-        onSetDeadline={handleSetDeadline}
-        onDelete={handleDelete}
-        onAddSubtask={handleAddSubtask}
-        onToggleSubtask={handleToggleSubtask}
-        onSetSubtaskDeadline={handleSetSubtaskDeadline}
-        onDeleteSubtask={handleDeleteSubtask}
-        pulseReady={!showOverdueGate}
-        selectMode={selectMode}
-        selected={selectedIds.has(task.id)}
-        onSelectToggle={() => toggleSelected(task.id)}
-        celebratingSubtaskIds={celebratingSubtaskIds}
-      />
+        ref={revealEnabled ? registerCard : undefined}
+        className={revealEnabled ? 'card-reveal' : undefined}
+      >
+        <TaskCard
+          task={task}
+          celebrating={celebratingIds.has(task.id)}
+          onToggleComplete={handleToggle}
+          onSetDeadline={handleSetDeadline}
+          onDelete={handleDelete}
+          onAddSubtask={handleAddSubtask}
+          onToggleSubtask={handleToggleSubtask}
+          onSetSubtaskDeadline={handleSetSubtaskDeadline}
+          onDeleteSubtask={handleDeleteSubtask}
+          pulseReady={!showOverdueGate}
+          selectMode={selectMode}
+          selected={selectedIds.has(task.id)}
+          onSelectToggle={() => toggleSelected(task.id)}
+          celebratingSubtaskIds={celebratingSubtaskIds}
+        />
+      </div>
     )
   }
 
@@ -421,19 +434,24 @@ export function TaskList() {
     if (entry.type === 'task') return renderCard(entry.task)
     const { task, subtask } = entry
     return (
-      <SubtaskStackCard
+      <div
         key={`subtask-${subtask.id}`}
-        subtask={subtask}
-        justCompleted={celebratingSubtaskIds.has(subtask.id)}
-        partOf={{
-          label: `Part of "${task.name}"`,
-          onClick: () => handleJumpToTask(task.id),
-        }}
-        onToggleComplete={(checked) => handleToggleSubtask(task, subtask, checked)}
-        onSetDeadline={(dateDeadline) => handleSetSubtaskDeadline(task, subtask, dateDeadline)}
-        onDelete={() => handleDeleteSubtask(task, subtask)}
-        pulseReady={!showOverdueGate}
-      />
+        ref={revealEnabled ? registerCard : undefined}
+        className={revealEnabled ? 'card-reveal' : undefined}
+      >
+        <SubtaskStackCard
+          subtask={subtask}
+          justCompleted={celebratingSubtaskIds.has(subtask.id)}
+          partOf={{
+            label: `Part of "${task.name}"`,
+            onClick: () => handleJumpToTask(task.id),
+          }}
+          onToggleComplete={(checked) => handleToggleSubtask(task, subtask, checked)}
+          onSetDeadline={(dateDeadline) => handleSetSubtaskDeadline(task, subtask, dateDeadline)}
+          onDelete={() => handleDeleteSubtask(task, subtask)}
+          pulseReady={!showOverdueGate}
+        />
+      </div>
     )
   }
 
