@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Logo } from '@/components/Logo'
 
 const COLUMNS = [
@@ -54,8 +55,13 @@ export function Footer() {
 
       <div className="mx-auto mt-12 flex max-w-6xl flex-col items-center gap-3 border-t border-white/10 px-6 pt-6 text-xs text-neutral-500 sm:flex-row sm:justify-between">
         {/* 'black' (inverse) variant — a starfield ground, not a
-            light/neutral one the color tile is meant for. */}
-        <Logo variant="black" scale="secondary" />
+            light/neutral one the color tile is meant for. Links home,
+            same as every other Logo instance in the app — this footer
+            only ever renders on an authenticated page, so that's
+            always /home here, never the landing page. */}
+        <Link to="/home" aria-label="Fauxcus home">
+          <Logo variant="black" scale="secondary" />
+        </Link>
         <span>© {new Date().getFullYear()} Fauxcus. All rights reserved.</span>
       </div>
     </footer>

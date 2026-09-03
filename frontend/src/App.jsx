@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet, Link } from 'react-router-dom'
 import './App.css'
 import { LoginForm } from '@/components/LoginForm'
 import { SignupForm } from '@/components/SignupForm'
@@ -44,8 +44,13 @@ function AuthLayout({ children }) {
       {/* 'black' (inverse) variant, not the default color/gradient tile —
           this corner sits directly on PublicLayout's own brand-gradient
           background one level up, and design-elements.md is explicit
-          that the gradient tile shouldn't go on another gradient. */}
-      <Logo variant="black" scale="secondary" className="absolute top-6 left-8" />
+          that the gradient tile shouldn't go on another gradient. Links
+          to the landing page — every screen under AuthLayout (login,
+          signup, verify, forgot/reset password) is only ever reached
+          logged out, so that's always / here. */}
+      <Link to="/" className="absolute top-6 left-8" aria-label="Fauxcus home">
+        <Logo variant="black" scale="secondary" />
+      </Link>
       {children}
       <div className="absolute bottom-0 left-0 flex w-full justify-center gap-6 bg-[#f8f9fa] p-4 text-sm">
         <a href="...">Contact Us</a>

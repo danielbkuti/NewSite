@@ -302,6 +302,21 @@ export function SignupVerify({ onSignupSuccess }) {
               </>
             )}
           </p>
+
+          {/* Real gap before this: resending only ever re-sends to the
+              same address (`email` above, fixed on this token), so a
+              mistyped email had no way back at all short of manually
+              editing the URL. Restarts signup from scratch rather than
+              editing the email in place — this token's PendingSignup
+              row is bound to the original address, there's no
+              "change the email on an existing pending signup" endpoint
+              to call instead. */}
+          <p className="text-center text-xs text-black/70">
+            Wrong email?{' '}
+            <Link to="/signup" className="font-semibold text-sky-600 hover:underline">
+              Start over
+            </Link>
+          </p>
         </CardContent>
       </Card>
     )
