@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from ..models import Task, SubTask, TaskActivity
+from ..models import Task, SubTask, TaskActivity, Notification
 from django.utils import timezone
 
 
@@ -81,3 +81,17 @@ class TaskSerializer(serializers.ModelSerializer):
         # dateCompleted is only ever set by Task.save() reacting to
         # `completed` changing — never client-writable.
         read_only_fields = ["dateCreated", "dateCompleted"]
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ["id", "message", "dateCreated", "read", "task"]
+        # `read` is the one thing a client legitimately changes here
+        # (marking a notification read) — everything else is only ever
+        # set by send_deadline_digest. `task` is always the *task's* id
+        # even for a subtask notification (the management command sets
+        # it to the subtask's parent) — only tasks have their own
+        # detail page to link to, same convention Dashboard.jsx's
+        # UpcomingRow already uses for taskId.
+        read_only_fields = ["message", "dateCreated", "task"]

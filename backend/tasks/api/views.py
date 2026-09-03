@@ -1,6 +1,8 @@
-from rest_framework import viewsets, permissions
-from ..models import Task, SubTask, TaskActivity
-from .serializers import TaskSerializer, SubTaskSerializer
+from rest_framework import viewsets, permissions, mixins
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from ..models import Task, SubTask, TaskActivity, Notification
+from .serializers import TaskSerializer, SubTaskSerializer, NotificationSerializer
 from rest_framework.filters import OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -55,3 +57,24 @@ class SubTaskViewSet(viewsets.ModelViewSet):
         name = instance.name
         instance.delete()
         TaskActivity.objects.create(task=task, message=f'Subtask "{name}" removed')
+
+
+class NotificationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
+    """
+    A user's own notifications — list + update `read` only. Rows are
+    only ever created by the send_deadline_digest management command,
+    never through this endpoint (no create/delete action exposed —
+    there's no legitimate client-side reason to make up a new
+    notification or erase one from the record).
+    """
+
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user)
+
+    @action(detail=False, methods=["post"])
+    def mark_all_read(self, request):
+        updated = self.get_queryset().filter(read=False).update(read=True)
+        return Response({"updated": updated})

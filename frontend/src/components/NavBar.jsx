@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { User, LogOut } from 'lucide-react'
 import { Logo } from '@/components/Logo'
+import { NotificationBell } from '@/components/NotificationBell'
 import { cn } from '@/lib/utils'
 
 const NAV_LINKS = [
@@ -125,6 +126,7 @@ export function NavBar({ firstName, onLogout }) {
         </nav>
 
         <div className="flex items-center gap-2">
+          <NotificationBell scrolled={scrolled} />
           {/* Gradient ring only while scrolled — same overlay Logo's
               black variant uses, `relative` on each button gives it
               something to position against. Rest state keeps its plain

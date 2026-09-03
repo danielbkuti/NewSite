@@ -53,6 +53,31 @@ services:
       - flexmaster_network
 
 
+  # Runs the daily deadline-digest notification job (see
+  # backend/scheduler.py) — a plain sleep-until-target-time loop, not
+  # Celery/Celery Beat. Same image/env as `web`, just a different
+  # command, so it needs no separate Dockerfile.
+  scheduler:
+    build: .
+    container_name: flexmaster_scheduler
+    restart: unless-stopped
+
+    command: python backend/scheduler.py
+
+    volumes:
+      - .:/app
+
+    env_file:
+      - .env
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    networks:
+      - flexmaster_network
+
+
 volumes:
   postgres_data:
 
