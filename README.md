@@ -95,8 +95,6 @@ Components:
 
 # Screenshots
 
-<!-- Add these to docs/ with the filenames below and they'll render here automatically. -->
-
 ### Landing page
 ![Landing page](docs/screenshot-landing.png)
 
@@ -107,7 +105,11 @@ Components:
 ![Task list](docs/screenshot-tasklist.png)
 
 ### Task detail
-![Task detail](docs/screenshot-taskdetail.png)
+
+The same page in two of its four deadline-driven states — in progress (purple, "far" from due) and completed (green) — showing how the palette, banner, and primary action all come from one state rather than being set independently.
+
+![Task detail — in progress](docs/screenshot-taskdetail2.png)
+![Task detail — completed](docs/screenshot-taskdetail.png)
 
 ### Progress
 ![Progress](docs/screenshot-progress.png)
