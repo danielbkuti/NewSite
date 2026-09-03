@@ -1,29 +1,29 @@
-# Fauxcus — Task Management Backend (Django + DRF + Docker)
+# Fauxcus — Task Management App (Django + DRF + React + Docker)
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![Django](https://img.shields.io/badge/Django-4.x-green)
+![React](https://img.shields.io/badge/React-Vite-61DAFB)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-blue)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-blue)
+
 ## Overview
 
-Fauxcus is a containerized Django task management backend featuring a REST API built with Django REST Framework.  
-The system supports user authentication, task and subtask management, email activation, and relational task completion propagation.
+Fauxcus is a full-stack task management app: a Django REST Framework API backing a React (Vite) frontend, running in Docker. It tracks tasks and subtasks with deadlines, surfaces urgency through a state-driven visual system (on-track / due-soon / overdue / completed), and layers in the kind of small-scale polish — completion celebrations, scroll-reveal animations, live progress stats — that a plain CRUD task list usually skips.
 
-This project demonstrates backend engineering practices including:
+This project demonstrates:
 
-- REST API design
-- relational data modeling
-- authentication workflows
-- containerized development environments
-- automated testing
-
-A React frontend will be integrated in the next phase.
+- Full-stack REST API design (DRF backend, React frontend consuming it over session-cookie auth)
+- Relational data modeling with cascading completion logic
+- A real digit-code email verification signup flow, with rate limiting
+- State-driven UI architecture (one deadline-derived theme drives a card's colors, banners, and animations)
+- Containerized development environment
+- Automated backend testing
 
 ---
 
 # Architecture
 
 ```
-Client (React – planned)
+React frontend (Vite)
         ↓
 Django REST API (DRF)
         ↓
@@ -36,26 +36,38 @@ Components:
 
 | Layer | Technology |
 |------|------------|
+| Frontend | React (Vite), Tailwind v4, shadcn/ui |
 | Backend | Django |
 | API | Django REST Framework |
 | Database | PostgreSQL |
 | Containerization | Docker |
-| Authentication | Custom Django User Model |
+| Authentication | Custom Django user model, session-cookie auth |
 | Testing | Django + DRF Test Framework |
 
 ---
 
 # Features
 
+### Frontend
+- Landing page with a live animated task-list preview
+- Dashboard: animated welcome header, streak tracking, "Upcoming" list pulled from tasks and subtasks alike
+- Task list: filter/sort, bulk select and complete/delete, live date search, scroll-reveal card animations
+- Task detail page: a four-state color theme (on-track / due-soon / overdue / completed) driving the whole page's palette, a progress dial, an activity log, and celebration animations (confetti, fireworks) on completion
+- Deadline editor: a portal-based wheel picker (day/month/year, optional time-of-day), shared across every place a deadline gets set
+- Progress page: a status breakdown bar, weekly activity chart, and a GitHub-style daily-activity heatmap doubling as a streak visual
+
 ### Authentication
 - Custom user model
-- Email verification activation
+- Digit-code email verification signup (6-digit code, attempt cap, expiry)
 - Login via username or email
+- Password reset by email
+- Per-IP and per-account rate limiting on auth endpoints
 
 ### Task Management
-- Create/update/delete tasks
-- Subtasks
-- Automatic parent completion propagation
+- Create/update/delete tasks and subtasks
+- Deadlines with date and optional time-of-day
+- Automatic parent-task completion propagation from subtasks
+- Per-task activity log (created, renamed, completed/reopened, deadline changes)
 
 ### API
 - RESTful endpoints
@@ -78,6 +90,27 @@ Components:
 - API tests
 - Model integrity tests
 - Authentication tests
+
+---
+
+# Screenshots
+
+<!-- Add these to docs/ with the filenames below and they'll render here automatically. -->
+
+### Landing page
+![Landing page](docs/screenshot-landing.png)
+
+### Dashboard
+![Dashboard](docs/screenshot-dashboard.png)
+
+### Task list
+![Task list](docs/screenshot-tasklist.png)
+
+### Task detail
+![Task detail](docs/screenshot-taskdetail.png)
+
+### Progress
+![Progress](docs/screenshot-progress.png)
 
 ---
 
@@ -118,9 +151,9 @@ cd flexmaster
 
 ---
 
-### 2. Create Environment File
+### 2. Create Environment Files
 
-Create a `.env` file:
+Backend — create a `.env` in the project root:
 
 ```
 DEBUG=True
@@ -132,6 +165,14 @@ POSTGRES_HOST=db
 POSTGRES_PORT=5432
 
 SECRET_KEY=your-secret-key
+ALLOWED_HOSTS=localhost,127.0.0.1
+FRONTEND_URL=http://localhost:3000
+```
+
+Frontend — create `frontend/.env`:
+
+```
+VITE_API_BASE_URL=http://localhost:8637
 ```
 
 ---
@@ -152,15 +193,25 @@ docker-compose exec web python manage.py migrate
 
 ---
 
-### 5. Access the Application
+### 5. Run the Frontend Dev Server
 
-Application:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+### 6. Access the Application
+
+Frontend:
 
 ```
-http://localhost:8637
+http://localhost:3000
 ```
 
-API Root:
+Backend API root:
 
 ```
 http://localhost:8637/api/
@@ -184,13 +235,17 @@ docker-compose exec web python manage.py test
 
 Allows authentication flexibility and supports future extensibility for user profiles and permissions.
 
-### REST API
+### REST API + Session-Cookie Auth
 
-The backend exposes a RESTful API using Django REST Framework to support integration with a React frontend.
+The backend exposes a RESTful API using Django REST Framework, consumed by the React frontend over session-cookie authentication rather than tokens.
 
 ### Subtask Completion Propagation
 
 Task completion state automatically updates based on the completion status of associated subtasks.
+
+### State-Driven UI
+
+A task's deadline (overdue / due-soon / on-track, plus completed) is the single source of truth for its color palette, banner, and animation across both the task list and the task detail page — no state is duplicated or hand-synced between the two.
 
 ### UTC Date Handling
 
@@ -210,7 +265,7 @@ Docker ensures a consistent development environment and simplifies dependency ma
 
 # Future Improvements
 
-- React frontend
+- Goals and Calendar pages (currently placeholders)
 - JWT authentication
 - Asynchronous email processing (Celery)
 - Production deployment (AWS / Fly / Railway)
