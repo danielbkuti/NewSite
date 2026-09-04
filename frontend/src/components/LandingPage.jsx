@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Bell, Check, Search } from 'lucide-react'
 import { Logo } from '@/components/Logo'
 import { Footer } from '@/components/Footer'
+import { ConfettiBurst } from '@/components/ConfettiBurst'
 import { checkEmailExists } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
@@ -167,7 +168,11 @@ function Hero() {
       <span className="block text-[11px] font-bold tracking-[.18em] text-[#33224a]/50 uppercase">
         Tasks · Subtasks · Deadlines
       </span>
-      <h1 className="font-display mt-[26px] max-w-[660px] text-[44px] leading-[.94] font-semibold tracking-[-.05em] text-[#241a33] text-balance sm:text-[72px] lg:text-[104px]">
+      {/* One line, not the design handoff's deliberate two-line wrap —
+          no max-width/text-balance fighting it, and sized down enough
+          at each breakpoint to actually fit the phrase on one line
+          rather than just hoping it does. */}
+      <h1 className="font-display mt-[26px] text-[32px] leading-[.94] font-semibold tracking-[-.05em] whitespace-nowrap text-[#241a33] sm:text-[56px] lg:text-[88px]">
         Nothing slips through.
       </h1>
       <div className="mt-11 grid grid-cols-1 items-end gap-12 lg:grid-cols-[1fr_420px] lg:gap-16">
@@ -263,7 +268,7 @@ function ProductShot() {
 
               <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
                 <div
-                  className="flex flex-col justify-between gap-3 rounded-[14px] p-[18px] text-[#33224a] sm:h-[186px]"
+                  className="flex flex-col justify-between gap-3 rounded-[14px] p-[18px] text-[#33224a] sm:min-h-[186px]"
                   style={{
                     background: 'linear-gradient(160deg,#f2e6ff 0%,#e0c3fc 52%,#c9a5ee 100%)',
                     boxShadow:
@@ -299,7 +304,7 @@ function ProductShot() {
                 </div>
 
                 <div
-                  className="flex flex-col justify-between gap-3 rounded-[14px] p-[18px] text-white sm:h-[186px]"
+                  className="flex flex-col justify-between gap-3 rounded-[14px] p-[18px] text-white sm:min-h-[186px]"
                   style={{
                     background: 'linear-gradient(160deg,#9b7dcd 0%,#7c5fb0 52%,#684d99 100%)',
                     boxShadow:
@@ -329,7 +334,7 @@ function ProductShot() {
                 </div>
 
                 <div
-                  className="flex flex-col justify-between gap-3 rounded-[14px] p-[18px] text-[#12314b] sm:h-[186px]"
+                  className="flex flex-col justify-between gap-3 rounded-[14px] p-[18px] text-[#12314b] sm:min-h-[186px]"
                   style={{
                     background: 'linear-gradient(160deg,#bcdfff 0%,#8ec5fc 52%,#72b0ef 100%)',
                     boxShadow:
@@ -453,31 +458,32 @@ function FeatureGrid() {
               bookkeeping, no forgotten open tickets.
             </p>
           </div>
-          {/* Completion colour matches the real Checkbox/"Done" badge
-              exactly (TaskCard.jsx's `data-checked:bg-emerald-500`,
-              TaskDetailPage's Done badge `bg-[#d1fae5] text-[#047857]`)
-              rather than the design handoff's plain `#56a456` — this app
-              uses that green for general accents, but emerald
-              specifically for "this is done." */}
-          <div className="flex flex-col gap-2 rounded-[13px] bg-[#33224a]/5 p-[18px] shadow-[inset_0_0_0_1px_rgba(51,34,74,.06)]">
-            <div className="flex items-center gap-2.5 border-b border-[#33224a]/10 pb-2.5">
-              <span className="flex size-4 shrink-0 items-center justify-center rounded-[5px] bg-emerald-500 text-white">
-                <Check className="size-[11px]" strokeWidth={3.5} aria-hidden="true" />
+          {/* A real task card, not a stylised proof panel — same
+              `rounded-2xl bg-card` shell, `.task-ring` border and
+              completion pill TaskCard.jsx itself renders
+              (`bg-gradient-to-r from-[#34d399] to-[#059669]`), and the
+              same emerald Checkbox for the subtasks under it. A visitor
+              who signs up sees exactly this, not a simplified stand-in. */}
+          <div className="relative rounded-2xl bg-card p-5 shadow-[0_1px_2px_rgba(37,37,37,.05)]">
+            <span aria-hidden="true" className="task-ring" />
+            <div className="relative flex items-center gap-3">
+              <span className="inline-flex shrink-0 items-center rounded-full bg-gradient-to-r from-[#34d399] to-[#059669] px-3 py-1 text-xs font-semibold text-white sm:px-4 sm:py-1.5 sm:text-sm">
+                Completed
               </span>
-              <span className="flex-1 text-sm font-bold text-[#b4b2ac] line-through">
+              <span className="flex-1 truncate text-sm font-semibold text-muted-foreground line-through sm:text-base">
                 Finish the Q3 report
               </span>
-              <span className="rounded-full bg-[#d1fae5] px-2.5 py-[3px] text-[11px] font-bold text-[#047857]">
-                closed automatically
+              <span className="hidden shrink-0 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 sm:inline">
+                All 3 done
               </span>
             </div>
-            <div className="flex flex-col gap-2.5 pl-[26px]">
+            <div className="relative mt-4 flex flex-col gap-2.5">
               {proofSubtasks.map((label) => (
                 <div key={label} className="flex items-center gap-2.5">
-                  <span className="flex size-3.5 shrink-0 items-center justify-center rounded-[4px] bg-emerald-500 text-white">
-                    <Check className="size-[9px]" strokeWidth={4} aria-hidden="true" />
+                  <span className="flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-emerald-500 bg-emerald-500 text-white">
+                    <Check className="size-3" strokeWidth={3} aria-hidden="true" />
                   </span>
-                  <span className="text-[13px] text-[#8e8e8e] line-through">{label}</span>
+                  <span className="text-sm text-muted-foreground line-through">{label}</span>
                 </div>
               ))}
             </div>
@@ -495,15 +501,20 @@ function FeatureGrid() {
               anything.
             </p>
           </div>
+          {/* Same due-pill component the real TaskCard/UpcomingRow render
+              — red countdown, solid-red overdue, purple "set/plain"
+              pill — inside a real card row (14px radius, task-ring),
+              not the design handoff's smaller generic tile. */}
           <div className="flex flex-col gap-2.5">
             {deadlineRows.map((row) => (
               <div
                 key={row.name}
-                className="flex items-center justify-between gap-3 rounded-[11px] bg-white/90 px-[14px] py-3 shadow-[inset_0_0_0_1px_rgba(51,34,74,.08)]"
+                className="relative flex items-center justify-between gap-3 rounded-[14px] bg-card px-[14px] py-3 shadow-[0_1px_2px_rgba(37,37,37,.05)]"
               >
-                <span className="text-[13px] font-bold">{row.name}</span>
+                <span aria-hidden="true" className="task-ring" />
+                <span className="relative text-[13px] font-bold">{row.name}</span>
                 <span
-                  className="rounded-full px-2.5 py-[3px] text-[11px] font-bold tabular-nums"
+                  className="relative rounded-full px-2.5 py-[3px] text-[11px] font-bold tabular-nums"
                   style={{ background: row.bg, color: row.color }}
                 >
                   {row.pill}
@@ -566,27 +577,75 @@ function FeatureGrid() {
   )
 }
 
+// Same emerald Checkbox look TaskCard/UpcomingRow render for a real
+// subtask row (`border-input` unchecked, `border-emerald-500
+// bg-emerald-500` checked) — not the design handoff's plain outline
+// square.
 function FilmstripRow({ label, checked }) {
   return (
     <div className="flex items-center gap-2.5">
-      {checked ? (
-        <span className="flex size-[15px] shrink-0 items-center justify-center rounded-[5px] bg-emerald-500 text-white">
-          <Check className="size-[10px]" strokeWidth={4} aria-hidden="true" />
-        </span>
-      ) : (
-        <span className="size-[15px] shrink-0 rounded-[5px] border-[1.5px] border-[#33224a]/30" />
+      <span
+        className={cn(
+          'flex size-4 shrink-0 items-center justify-center rounded-[4px] border',
+          checked ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-input bg-transparent'
+        )}
+      >
+        {checked && <Check className="size-3" strokeWidth={3} aria-hidden="true" />}
+      </span>
+      <span className={cn('text-sm font-medium', checked && 'text-muted-foreground line-through')}>{label}</span>
+    </div>
+  )
+}
+
+// Frame 3 — the moment the parent closes. Static at rest, same as the
+// other two frames (no autoplaying demo, per the design handoff), but
+// hovering it replays the real completion celebration: ConfettiBurst
+// (the exact component TaskCard.jsx mounts), the card's own
+// `animate-flash-emerald` ring, and the checkbox's `animate-check-pop`
+// — not a re-drawn approximation of them. `plays` increments on every
+// hover-enter and keys the animated pieces so a fresh hover always
+// replays from frame 0 instead of only ever firing once.
+function ClosingParentFrame() {
+  const [plays, setPlays] = useState(0)
+  const celebrating = plays > 0
+
+  return (
+    <div
+      key={plays}
+      onMouseEnter={() => setPlays((p) => p + 1)}
+      className={cn(
+        'relative flex cursor-default flex-col gap-2.5 rounded-2xl bg-card p-5 shadow-[0_1px_2px_rgba(37,37,37,.05)]',
+        celebrating && 'animate-flash-emerald'
       )}
-      <span className={cn('text-[13px] font-bold', checked && 'text-[#b4b2ac] line-through')}>{label}</span>
+    >
+      <span aria-hidden="true" className="task-ring" />
+      {celebrating && <ConfettiBurst />}
+      <div className="relative flex items-center justify-between gap-2.5 border-b pb-2.5">
+        <span className="flex items-center gap-2.5">
+          <span
+            className={cn(
+              'flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-emerald-500 bg-emerald-500 text-white',
+              celebrating && 'animate-check-pop'
+            )}
+          >
+            <Check className="size-3" strokeWidth={3} aria-hidden="true" />
+          </span>
+          <span className="text-sm font-medium text-muted-foreground line-through">Finish the Q3 report</span>
+        </span>
+        <span className="rounded-full bg-[#d1fae5] px-2 py-[3px] text-[10px] font-bold text-[#047857]">done</span>
+      </div>
+      <div className="relative pl-[26px]">
+        <FilmstripRow label="Send for review" checked />
+      </div>
     </div>
   )
 }
 
 // Static three-frame filmstrip replacing the old page's timer-driven
 // demo loop — the design handoff is explicit that this must stay
-// static ("there isn't a step four"). Each frame is its own literal
-// block rather than data-mapped: frame 3 has a genuinely different
-// shape (a closed parent + one indented subtask, not three flat rows),
-// so forcing a shared shape would buy less than it costs.
+// static ("there isn't a step four"). Every frame is now the same
+// `rounded-2xl bg-card` + `.task-ring` shell TaskCard.jsx itself
+// renders, not a bespoke "proof panel" look.
 function WatchItWork() {
   return (
     <section className="mx-auto max-w-[1180px] px-6 pt-20 sm:px-10 sm:pt-[112px]">
@@ -595,14 +654,15 @@ function WatchItWork() {
           Watch it work
         </h2>
         <p className="m-0 max-w-[30ch] text-sm leading-[1.6] text-[#241a33]/60">
-          Three ticks, start to finish. This is the whole interaction — there isn&apos;t a step
-          four.
+          Three ticks, start to finish — hover the last one. This is the whole interaction, there
+          isn&apos;t a step four.
         </p>
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-[22px] sm:grid-cols-3">
         <div className="flex flex-col gap-4">
-          <div className="filmstrip-frame flex flex-col gap-2.5 p-5">
+          <div className="relative flex flex-col gap-2.5 rounded-2xl bg-card p-5 shadow-[0_1px_2px_rgba(37,37,37,.05)]">
+            <span aria-hidden="true" className="task-ring" />
             <FilmstripRow label="Pull the numbers" checked={false} />
             <FilmstripRow label="Draft the outline" checked={false} />
             <FilmstripRow label="Send for review" checked={false} />
@@ -617,7 +677,8 @@ function WatchItWork() {
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="filmstrip-frame flex flex-col gap-2.5 p-5">
+          <div className="relative flex flex-col gap-2.5 rounded-2xl bg-card p-5 shadow-[0_1px_2px_rgba(37,37,37,.05)]">
+            <span aria-hidden="true" className="task-ring" />
             <FilmstripRow label="Pull the numbers" checked />
             <FilmstripRow label="Draft the outline" checked />
             <FilmstripRow label="Send for review" checked={false} />
@@ -632,27 +693,7 @@ function WatchItWork() {
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="filmstrip-frame-emphasized flex flex-col gap-2.5 p-5">
-            <div className="flex items-center justify-between gap-2.5 border-b border-[#33224a]/10 pb-2.5">
-              <span className="flex items-center gap-2.5">
-                <span className="flex size-[15px] shrink-0 items-center justify-center rounded-[5px] bg-emerald-500 text-white">
-                  <Check className="size-[10px]" strokeWidth={4} aria-hidden="true" />
-                </span>
-                <span className="text-[13px] font-bold text-[#b4b2ac] line-through">
-                  Finish the Q3 report
-                </span>
-              </span>
-              <span className="rounded-full bg-[#d1fae5] px-2 py-[3px] text-[10px] font-bold text-[#047857]">
-                done
-              </span>
-            </div>
-            <div className="flex items-center gap-2.5 pl-[25px]">
-              <span className="flex size-3.5 shrink-0 items-center justify-center rounded-[4px] bg-emerald-500 text-white">
-                <Check className="size-[9px]" strokeWidth={4} aria-hidden="true" />
-              </span>
-              <span className="text-xs text-[#8e8e8e] line-through">Send for review</span>
-            </div>
-          </div>
+          <ClosingParentFrame />
           <div className="flex items-baseline gap-3">
             <span className="font-display text-xs font-semibold tracking-[.14em] text-[#7c5fb0]/85">03</span>
             <p className="m-0 text-sm leading-[1.55] text-[#241a33]/70">
