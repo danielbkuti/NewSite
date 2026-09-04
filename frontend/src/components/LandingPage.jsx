@@ -373,7 +373,17 @@ function ProductShot() {
                 <span className="text-xs font-bold text-[#0284c7]">View all tasks →</span>
               </div>
               <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-3.5 rounded-[13px] bg-white px-[17px] py-3 shadow-[inset_0_0_0_1px_rgba(37,37,37,.1)]">
+                {/* Matches the real Dashboard's UpcomingRow exactly — same
+                    14px radius, same gradient ring on every row (not just
+                    the first — an earlier pass here only rang the first
+                    row, which is what the real page briefly did too
+                    before that got reported as looking wrong), same
+                    red-for-urgent/purple-for-scheduled pill colors. The
+                    real Upcoming list never shows a completed item (they
+                    drop out once checked), so all three rows here are
+                    open tasks, not a fabricated "done" example. */}
+                <div className="relative flex items-center gap-3.5 rounded-[14px] bg-white px-[17px] py-3 shadow-[inset_0_0_0_1px_rgba(37,37,37,.1)]">
+                  <span aria-hidden="true" className="task-ring" />
                   <span className="size-[17px] shrink-0 rounded-[5px] border-[1.5px] border-[#e2e0da]" />
                   <div className="flex flex-1 flex-col gap-0.5">
                     <span className="text-[13px] font-bold">Draft the outline</span>
@@ -383,7 +393,8 @@ function ProductShot() {
                     Due in 03:41:12
                   </span>
                 </div>
-                <div className="flex items-center gap-3.5 rounded-[13px] bg-white px-[17px] py-3 shadow-[inset_0_0_0_1px_rgba(37,37,37,.1)]">
+                <div className="relative flex items-center gap-3.5 rounded-[14px] bg-white px-[17px] py-3 shadow-[inset_0_0_0_1px_rgba(37,37,37,.1)]">
+                  <span aria-hidden="true" className="task-ring" />
                   <span className="size-[17px] shrink-0 rounded-[5px] border-[1.5px] border-[#e2e0da]" />
                   <div className="flex flex-1 flex-col gap-0.5">
                     <span className="text-[13px] font-bold">Renew passport</span>
@@ -392,15 +403,14 @@ function ProductShot() {
                     Overdue
                   </span>
                 </div>
-                <div className="flex items-center gap-3.5 rounded-[13px] bg-white px-[17px] py-3 shadow-[inset_0_0_0_1px_rgba(37,37,37,.1)]">
-                  <span className="flex size-[17px] shrink-0 items-center justify-center rounded-[5px] border-[1.5px] border-[#56a456] bg-[#56a456] text-white">
-                    <Check className="size-[11px]" strokeWidth={3.5} />
-                  </span>
+                <div className="relative flex items-center gap-3.5 rounded-[14px] bg-white px-[17px] py-3 shadow-[inset_0_0_0_1px_rgba(37,37,37,.1)]">
+                  <span aria-hidden="true" className="task-ring" />
+                  <span className="size-[17px] shrink-0 rounded-[5px] border-[1.5px] border-[#e2e0da]" />
                   <div className="flex flex-1 flex-col gap-0.5">
-                    <span className="text-[13px] font-bold text-[#b4b2ac] line-through">Send the invoice</span>
+                    <span className="text-[13px] font-bold">Book the dentist</span>
                   </div>
-                  <span className="rounded-full bg-[#56a456]/10 px-2.5 py-[3px] text-[11px] font-bold text-[#3d8a3d]">
-                    Done 8:12 AM
+                  <span className="rounded-full bg-[#f3e8ff] px-2.5 py-[3px] text-[11px] font-bold text-[#6b46a8]">
+                    Sep 24, 2026
                   </span>
                 </div>
               </div>
@@ -417,7 +427,7 @@ function FeatureGrid() {
   const deadlineRows = [
     { name: 'Prepare client demo', pill: 'Due in 03:41:12', bg: '#fef2f2', color: '#b91c1c' },
     { name: 'Renew passport', pill: 'Overdue', bg: '#b91c1c', color: '#fff' },
-    { name: 'Review the PR', pill: 'Sep 12, 2026', bg: '#fffbeb', color: '#b45309' },
+    { name: 'Review the PR', pill: 'Sep 12, 2026', bg: '#f3e8ff', color: '#6b46a8' },
   ]
 
   return (
@@ -443,22 +453,28 @@ function FeatureGrid() {
               bookkeeping, no forgotten open tickets.
             </p>
           </div>
+          {/* Completion colour matches the real Checkbox/"Done" badge
+              exactly (TaskCard.jsx's `data-checked:bg-emerald-500`,
+              TaskDetailPage's Done badge `bg-[#d1fae5] text-[#047857]`)
+              rather than the design handoff's plain `#56a456` — this app
+              uses that green for general accents, but emerald
+              specifically for "this is done." */}
           <div className="flex flex-col gap-2 rounded-[13px] bg-[#33224a]/5 p-[18px] shadow-[inset_0_0_0_1px_rgba(51,34,74,.06)]">
             <div className="flex items-center gap-2.5 border-b border-[#33224a]/10 pb-2.5">
-              <span className="flex size-4 shrink-0 items-center justify-center rounded-[5px] bg-[#56a456] text-white">
+              <span className="flex size-4 shrink-0 items-center justify-center rounded-[5px] bg-emerald-500 text-white">
                 <Check className="size-[11px]" strokeWidth={3.5} aria-hidden="true" />
               </span>
               <span className="flex-1 text-sm font-bold text-[#b4b2ac] line-through">
                 Finish the Q3 report
               </span>
-              <span className="rounded-full bg-[#56a456]/12 px-2.5 py-[3px] text-[11px] font-bold text-[#3d8a3d]">
+              <span className="rounded-full bg-[#d1fae5] px-2.5 py-[3px] text-[11px] font-bold text-[#047857]">
                 closed automatically
               </span>
             </div>
             <div className="flex flex-col gap-2.5 pl-[26px]">
               {proofSubtasks.map((label) => (
                 <div key={label} className="flex items-center gap-2.5">
-                  <span className="flex size-3.5 shrink-0 items-center justify-center rounded-[4px] bg-[#56a456] text-white">
+                  <span className="flex size-3.5 shrink-0 items-center justify-center rounded-[4px] bg-emerald-500 text-white">
                     <Check className="size-[9px]" strokeWidth={4} aria-hidden="true" />
                   </span>
                   <span className="text-[13px] text-[#8e8e8e] line-through">{label}</span>
@@ -554,7 +570,7 @@ function FilmstripRow({ label, checked }) {
   return (
     <div className="flex items-center gap-2.5">
       {checked ? (
-        <span className="flex size-[15px] shrink-0 items-center justify-center rounded-[5px] bg-[#56a456] text-white">
+        <span className="flex size-[15px] shrink-0 items-center justify-center rounded-[5px] bg-emerald-500 text-white">
           <Check className="size-[10px]" strokeWidth={4} aria-hidden="true" />
         </span>
       ) : (
@@ -619,19 +635,19 @@ function WatchItWork() {
           <div className="filmstrip-frame-emphasized flex flex-col gap-2.5 p-5">
             <div className="flex items-center justify-between gap-2.5 border-b border-[#33224a]/10 pb-2.5">
               <span className="flex items-center gap-2.5">
-                <span className="flex size-[15px] shrink-0 items-center justify-center rounded-[5px] bg-[#56a456] text-white">
+                <span className="flex size-[15px] shrink-0 items-center justify-center rounded-[5px] bg-emerald-500 text-white">
                   <Check className="size-[10px]" strokeWidth={4} aria-hidden="true" />
                 </span>
                 <span className="text-[13px] font-bold text-[#b4b2ac] line-through">
                   Finish the Q3 report
                 </span>
               </span>
-              <span className="rounded-full bg-[#56a456]/12 px-2 py-[3px] text-[10px] font-bold text-[#3d8a3d]">
+              <span className="rounded-full bg-[#d1fae5] px-2 py-[3px] text-[10px] font-bold text-[#047857]">
                 done
               </span>
             </div>
             <div className="flex items-center gap-2.5 pl-[25px]">
-              <span className="flex size-3.5 shrink-0 items-center justify-center rounded-[4px] bg-[#56a456] text-white">
+              <span className="flex size-3.5 shrink-0 items-center justify-center rounded-[4px] bg-emerald-500 text-white">
                 <Check className="size-[9px]" strokeWidth={4} aria-hidden="true" />
               </span>
               <span className="text-xs text-[#8e8e8e] line-through">Send for review</span>
