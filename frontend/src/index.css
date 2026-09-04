@@ -494,6 +494,82 @@
   .animate-welcome-name-fill { animation: none; }
 }
 
+/* --- LandingPage: glass surfaces & plum/light buttons -------------------
+   Shared recipes from design_handoff_landing_page/README.md, reused
+   across the feature grid, filmstrip and both CTA buttons rather than
+   repeated inline per call site. `.glass-card` is the big interactive
+   feature tiles (hover lift); `.glass-tile` is the three lighter ones
+   below it (hover just brightens); `.plum-btn`/`.light-btn` are the
+   header/hero/CTA buttons — dark-on-light and light-on-dark, same
+   gap-widening hover in both. Motion is dropped, not just slowed,
+   under prefers-reduced-motion, per the handoff's own instruction. */
+.glass-card {
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .97), rgba(255, 255, 255, .84));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .95),
+    inset 0 0 0 1px rgba(51, 34, 74, .07),
+    inset 0 -26px 44px -30px rgba(51, 34, 74, .16),
+    0 20px 44px -30px rgba(51, 34, 74, .34);
+  transition: transform .18s, box-shadow .18s;
+}
+.glass-card:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .95),
+    inset 0 0 0 1px rgba(51, 34, 74, .1),
+    inset 0 -26px 44px -30px rgba(51, 34, 74, .16),
+    0 28px 54px -30px rgba(51, 34, 74, .4);
+}
+.glass-tile {
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), inset 0 0 0 1px rgba(51, 34, 74, .07);
+  transition: background .18s;
+}
+.glass-tile:hover { background: rgba(255, 255, 255, .95); }
+
+.plum-btn, .light-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: gap .18s;
+}
+.plum-btn {
+  background: linear-gradient(180deg, #4c3670, #33224a 62%, #2b1c40);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .42), inset 0 -1px 0 rgba(0, 0, 0, .2), 0 12px 24px -12px rgba(51, 34, 74, .6);
+}
+.light-btn {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .98), #efe9f8 70%, #e4dbf3);
+  color: #33224a;
+  box-shadow: inset 0 1px 0 #fff, 0 14px 28px -16px rgba(0, 0, 0, .6);
+}
+.plum-btn:hover, .light-btn:hover { gap: 11px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-card, .plum-btn, .light-btn { transition: none; }
+  .glass-card:hover { transform: none; }
+  .plum-btn:hover, .light-btn:hover { gap: 8px; }
+}
+
+/* "Watch it work" filmstrip frames — static, no hover; the third
+   (emphasized) frame gets the purple-tinted variant for the "parent
+   just closed" moment. */
+.filmstrip-frame {
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .97), rgba(255, 255, 255, .85));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .95), inset 0 0 0 1px rgba(51, 34, 74, .07), 0 18px 40px -28px rgba(51, 34, 74, .32);
+}
+.filmstrip-frame-emphasized {
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(248, 245, 252, .9));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .95), inset 0 0 0 1px rgba(124, 95, 176, .28), 0 22px 46px -26px rgba(124, 95, 176, .5);
+}
+
 /* --- Dashboard: Quick start card previews -------------------------------
    The three hero-adjacent glass cards each carry a miniature of what
    they make (a checklist, a goal bar, a week strip) that ticks on a
