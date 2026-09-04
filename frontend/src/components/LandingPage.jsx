@@ -1,297 +1,807 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import {
-  CalendarClock,
-  Gauge,
-  ListChecks,
-  Search,
-  TrendingUp,
-  ArrowRight,
-  Check,
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
+import { ArrowRight, Bell, Check, Search } from 'lucide-react'
 import { Logo } from '@/components/Logo'
 import { Footer } from '@/components/Footer'
 import { checkEmailExists } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
-// The one brand identity mark used everywhere else in the app (Logo's
-// tile, the search bars' gradient-ring, task cards' gradient border) —
-// reused here rather than reinvented, so the marketing page and the
-// product it's selling visibly share one palette instead of drifting
-// into its own "landing page purple."
-const BRAND_GRADIENT = 'linear-gradient(to bottom right, #e0c3fc, #7c5fb0, #8ec5fc)'
+// Rebuilt from design_handoff_landing_page/README.md — a type-led,
+// glass-surfaced page replacing the old gradient-blob hero and five
+// equal icon tiles. Deliberately static: the only motion anywhere on
+// this page is `.18s` hover feedback (see .glass-card/.plum-btn/
+// .light-btn in index.css) — no scroll reveals, no autoplaying demo.
+// The previous cycling-highlight/demo-loop hooks are gone with it.
 
-// One tile marked `featured` spans two grid columns on sm+ — five equal
-// boxes in a 3-col grid leaves an orphaned gap on the last row (a
-// generic-feeling layout); this way every row fills exactly, and the
-// bigger tile reads as "the differentiator" rather than five identical
-// cards.
-const FEATURES = [
+const TRUST_ITEMS = ['Free to start', 'No card required', 'Nothing to configure']
+
+const SPEC_ROWS = [
+  { term: 'Subtasks roll up to the parent', value: 'Automatic' },
+  { term: 'Search across tasks and dates', value: 'Live' },
+  { term: 'Boards, swimlanes, workflow setup', value: 'None', muted: true },
+]
+
+const HOW_STEPS = [
   {
-    icon: CalendarClock,
-    title: 'Stay on schedule',
-    description:
-      'Set a deadline on any task and see it right on the card — no digging through a separate calendar.',
-    accent: '#7c5fb0',
-    featured: true,
+    title: 'Type what needs doing',
+    body: 'One field, one line. Add a deadline if it has one — otherwise it just sits in the list.',
   },
   {
-    icon: ListChecks,
-    title: 'Break it down',
-    description:
-      'Split a task into subtasks. Finish all of them and the parent task marks itself done automatically.',
-    accent: '#8ec5fc',
+    title: 'Break the big ones down',
+    body: 'Subtasks turn a vague job into three obvious moves, and roll up as you close them.',
   },
   {
-    icon: Gauge,
-    title: 'See progress at a glance',
-    description:
-      'A clear status badge on every task means you always know what’s pending, in progress, or done.',
-    accent: '#56a456',
-  },
-  {
-    icon: Search,
-    title: 'Find anything fast',
-    description:
-      'Live search across every task and subtask by name — or just start typing a date to jump straight to what’s due then.',
-    accent: '#f5c451',
-  },
-  {
-    icon: TrendingUp,
-    title: 'Know your habits',
-    description:
-      'Completion rate, streaks, and your most productive time of day — tracked automatically from what you already do.',
-    accent: '#ec4899',
+    title: 'Work the top of the list',
+    body: "Overdue first, then what's due soonest. Stats and streaks build themselves behind you.",
   },
 ]
 
-const TRUST_ITEMS = ['Free to start', 'No credit card required', 'Search, stats, and reminders included']
+// One instance per email form (hero + closing CTA) — each keeps its
+// own state rather than sharing one, so typing in one never touches
+// the other. Same checkEmailExists → /login or /signup flow the old
+// page used, just restyled; `variant="dark"` is the closing CTA's
+// version sitting on the dark plum card instead of the sand page.
+function EmailCaptureForm({ variant = 'light', idPrefix }) {
+  const navigate = useNavigate()
+  const [email, setEmail] = useState('')
+  const [checking, setChecking] = useState(false)
+  const [error, setError] = useState(null)
+  const dark = variant === 'dark'
 
-// Mimics a task flipping between pending and completed — cycles between
-// the two states the app itself actually uses for "not done yet" (the
-// brand gradient, same as a pending task's own accent chrome) and "done"
-// (emerald, same as every completed badge/checkbox in the product) —
-// not an arbitrary landing-page color pair.
-function useCyclingHighlight(intervalMs = 1800) {
-  const [done, setDone] = useState(false)
-
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      return
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setError(null)
+    setChecking(true)
+    try {
+      const { exists } = await checkEmailExists(email)
+      navigate(exists ? '/login' : '/signup', { state: { email } })
+    } catch {
+      setError('Something went wrong. Please try again.')
+    } finally {
+      setChecking(false)
     }
-    const id = setInterval(() => setDone((d) => !d), intervalMs)
-    return () => clearInterval(id)
-  }, [intervalMs])
+  }
 
-  return done
-}
-
-// ---- "watch it work" demo -------------------------------------------
-// Purely presentational — three sample tasks shaped exactly like real
-// API tasks (id/name/dateDeadline), rendered through the same
-// Card/Badge/Checkbox components the real app uses, driven by a small
-// timeline instead of user clicks. No login, no network calls: it just
-// plays on a loop so the page shows the product actually doing
-// something instead of a frozen mockup.
-const DEMO_TASKS = [
-  { id: 1, name: 'Draft Q3 project brief', dateDeadline: null },
-  { id: 2, name: "Review teammate's pull request", dateDeadline: null },
-  { id: 3, name: 'Prepare client demo', dateDeadline: '2026-09-05T00:00:00Z' },
-]
-
-// Each frame is which of DEMO_TASKS (by index) are checked at that point
-// in the loop, and how long to hold before advancing.
-const DEMO_FRAMES = [
-  { checked: [false, false, false], holdMs: 1300 },
-  { checked: [true, false, false], holdMs: 1200 },
-  { checked: [true, true, false], holdMs: 1200 },
-  { checked: [true, true, true], holdMs: 2600 },
-]
-
-function prefersReducedMotion() {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
-}
-
-function useDemoAnimation() {
-  // Reduced motion: settle on the last frame (everything completed) and
-  // never schedule a timer — no motion at all, but still the feature at
-  // its best static state rather than an empty checklist.
-  const [frameIndex, setFrameIndex] = useState(() =>
-    prefersReducedMotion() ? DEMO_FRAMES.length - 1 : 0
-  )
-
-  useEffect(() => {
-    if (prefersReducedMotion()) return
-    const id = setTimeout(() => {
-      setFrameIndex((i) => (i + 1) % DEMO_FRAMES.length)
-    }, DEMO_FRAMES[frameIndex].holdMs)
-    return () => clearTimeout(id)
-  }, [frameIndex])
-
-  return DEMO_FRAMES[frameIndex]
-}
-
-function formatDeadline(iso) {
-  // Explicit UTC so the displayed date matches what's actually stored,
-  // regardless of the viewer's local timezone — mirrors TaskCard.
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  })
-}
-
-// A plain span rather than the shared <Badge> — Badge's own
-// `useRender`/`mergeProps` plumbing doesn't forward a `style` prop to
-// the DOM node, and separately, its default variant's `bg-primary`
-// utility beat a `bg-emerald-500`/gradient override class here even
-// with the conflicting class correctly stripped from the element
-// (confirmed live: computed `background-color` still resolved to
-// `--primary`, a stylesheet cascade-order quirk with cva's own
-// variant classes, not a className-string bug) — so this pill sets
-// its own color with inline `style`, which isn't subject to either
-// problem. Visually identical to Badge's own default pill treatment.
-function StatusChip({ done }) {
   return (
-    <span
-      className="inline-flex h-5 w-fit shrink-0 items-center justify-center rounded-4xl px-2 py-0.5 text-xs font-medium whitespace-nowrap text-white transition-colors duration-300"
-      style={{ background: done ? '#10b981' : BRAND_GRADIENT }}
-    >
-      {done ? 'completed' : 'pending'}
-    </span>
+    <div className="flex flex-col gap-2">
+      <form onSubmit={handleSubmit} className="flex max-w-[480px] items-center gap-2.5">
+        <label htmlFor={`${idPrefix}-email`} className="sr-only">
+          Email address
+        </label>
+        <input
+          id={`${idPrefix}-email`}
+          type="email"
+          name="email"
+          autoComplete="email"
+          spellCheck={false}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@work.com"
+          required
+          className={cn(
+            'min-w-0 flex-1 rounded-[11px] px-[18px] py-[14px] text-[15px] outline-none focus-visible:ring-2 focus-visible:ring-[#7c5fb0]/50',
+            dark
+              ? 'bg-white/12 text-white placeholder:text-white/50 shadow-[inset_0_1px_0_rgba(255,255,255,.25),inset_0_0_0_1px_rgba(255,255,255,.16)]'
+              : 'bg-white/90 text-[#241a33] placeholder:text-[#241a33]/40 shadow-[inset_0_1px_0_rgba(255,255,255,.9),inset_0_0_0_1px_rgba(51,34,74,.12)]'
+          )}
+        />
+        <button
+          type="submit"
+          disabled={checking}
+          className={cn(
+            'shrink-0 px-[22px] py-[15px] text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7c5fb0]/50',
+            dark ? 'light-btn' : 'plum-btn'
+          )}
+        >
+          {checking ? (
+            'Checking…'
+          ) : (
+            <>
+              Get started
+              <ArrowRight className="size-[14px]" strokeWidth={3} aria-hidden="true" />
+            </>
+          )}
+        </button>
+      </form>
+      {error && (
+        <p role="alert" aria-live="polite" className={cn('text-sm', dark ? 'text-red-300' : 'text-destructive')}>
+          {error}
+        </p>
+      )}
+    </div>
   )
 }
 
-// Same reasoning as StatusChip above (a plain span with inline style,
-// not <Badge>) — the headline's "doers"/"done" words, sized up for
-// display type instead of a status pill.
-function HeroWordChip({ done, children }) {
+function Header() {
   return (
-    <span
-      className="inline-block rounded-full px-3 py-1 align-middle text-2xl font-bold text-white transition-colors duration-500 sm:text-3xl lg:text-4xl"
-      style={{ background: done ? '#10b981' : BRAND_GRADIENT }}
-    >
-      {children}
-    </span>
+    <header className="sticky top-0 z-50 h-[70px] border-b border-[#33224a]/10 bg-[#f0eee9]/78 backdrop-blur-[16px]">
+      <div className="mx-auto flex h-full max-w-[1180px] items-center justify-between px-4 sm:px-10">
+        {/* This page only ever renders when logged out (App.jsx redirects
+            an authenticated visitor away from / entirely), so linking to
+            / here is a same-page no-op — kept for consistency with every
+            other Logo instance in the app, all of which are real links.
+            `sizeScale` shrinks it a bit (same ratio NavBar's own header
+            logo uses) — at full size plus "Log in" and the button, a
+            375px header had nowhere to give and "Log in" wrapped onto
+            its own line, overlapping the logo. */}
+        <Link to="/" aria-label="Fauxcus home" className="shrink-0">
+          <Logo scale="secondary" sizeScale={0.85} />
+        </Link>
+        <nav className="hidden items-center gap-[30px] text-sm font-bold text-[#33224a]/68 sm:flex">
+          <a
+            href="#features"
+            className="rounded transition-colors hover:text-[#33224a] focus-visible:ring-2 focus-visible:ring-[#7c5fb0]/50 focus-visible:outline-none"
+          >
+            Features
+          </a>
+          <a
+            href="#how"
+            className="rounded transition-colors hover:text-[#33224a] focus-visible:ring-2 focus-visible:ring-[#7c5fb0]/50 focus-visible:outline-none"
+          >
+            How it works
+          </a>
+        </nav>
+        <div className="flex shrink-0 items-center gap-2.5 sm:gap-[18px]">
+          <Link
+            to="/login"
+            className="rounded text-sm font-bold whitespace-nowrap text-[#33224a] focus-visible:ring-2 focus-visible:ring-[#7c5fb0]/50 focus-visible:outline-none"
+          >
+            Log in
+          </Link>
+          <Link
+            to="/signup"
+            className="plum-btn px-3 py-2 text-sm sm:px-[17px] sm:py-[10px] focus-visible:ring-2 focus-visible:ring-[#7c5fb0]/50 focus-visible:outline-none"
+          >
+            Start free
+            <ArrowRight className="size-[14px]" strokeWidth={3} aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
+    </header>
   )
 }
 
-function DemoTaskCard({ task, checked }) {
+function Hero() {
   return (
-    <Card size="sm" className="ring-black/5">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Checkbox checked={checked} disabled />
-          <span className={cn('transition-colors duration-300', checked && 'text-muted-foreground line-through')}>
-            {task.name}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        <StatusChip done={checked} />
-        {task.dateDeadline && (
-          <p className="text-xs text-muted-foreground">
-            Due {formatDeadline(task.dateDeadline)}
+    <section className="mx-auto max-w-[1180px] px-6 pt-16 sm:px-10 sm:pt-[104px]">
+      <span className="block text-[11px] font-bold tracking-[.18em] text-[#33224a]/50 uppercase">
+        Tasks · Subtasks · Deadlines
+      </span>
+      <h1 className="font-display mt-[26px] max-w-[660px] text-[44px] leading-[.94] font-semibold tracking-[-.05em] text-[#241a33] text-balance sm:text-[72px] lg:text-[104px]">
+        Nothing slips through.
+      </h1>
+      <div className="mt-11 grid grid-cols-1 items-end gap-12 lg:grid-cols-[1fr_420px] lg:gap-16">
+        <div className="flex flex-col gap-[26px]">
+          <p className="max-w-[34ch] text-lg leading-[1.5] text-[#241a33]/68 text-pretty sm:text-xl">
+            Every task, subtask and deadline in one list. Close the last subtask and the parent
+            closes itself.
           </p>
-        )}
-      </CardContent>
-    </Card>
+          <EmailCaptureForm idPrefix="hero" />
+          <ul className="flex flex-wrap gap-[22px] text-xs font-bold text-[#241a33]/55">
+            {TRUST_ITEMS.map((item) => (
+              <li key={item} className="flex items-center gap-[7px]">
+                <Check className="size-[13px] text-[#56a456]" strokeWidth={3.5} aria-hidden="true" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <dl className="m-0 flex flex-col border-t border-[#33224a]/14">
+          {SPEC_ROWS.map((row) => (
+            <div
+              key={row.term}
+              className="flex items-baseline justify-between gap-4 border-b border-[#33224a]/14 py-[13px]"
+            >
+              <dt className="text-[13px] text-[#241a33]/60">{row.term}</dt>
+              <dd
+                className={cn(
+                  'font-display m-0 text-[13px] font-semibold',
+                  row.muted ? 'text-[#241a33]/35' : 'text-[#33224a]'
+                )}
+              >
+                {row.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
   )
 }
 
-// The floating product mockup — a browser-chrome-style card holding the
-// live demo loop, given a slight permanent tilt and a couple of small
-// overlapping chips so it reads as a floating screenshot next to the
-// hero copy rather than a flat, centered rectangle. All decorative bits
-// (chips, glow) are aria-hidden; the actual demo underneath still has
-// its own real DOM (the checkboxes/badges), same as before.
-function ProductMockup({ demoFrame }) {
+// A static recreation of the real home screen (Dashboard.jsx), not a
+// screenshot — this environment has no way to capture and persist an
+// actual pixel screenshot as a build asset, and the design handoff's
+// own prototype took the same fallback for the same reason: "It was
+// built in HTML here because the existing screenshot shows the *old*
+// dashboard." Copy/colors/layout are pulled straight from the real
+// Dashboard.jsx cards, marked `role="img"` with the interactive-looking
+// bits (checkboxes, buttons) `aria-hidden` underneath it — none of it
+// is a real control. Swap this whole block for an <img> once a fresh
+// 2x screenshot of the real dashboard exists.
+function ProductShot() {
   return (
-    <div className="relative mx-auto w-full max-w-sm lg:mx-0">
+    <section className="mx-auto max-w-[1320px] px-4 pt-12 sm:px-10 sm:pt-[76px]">
       <div
-        aria-hidden="true"
-        className="absolute -inset-10 -z-10 rounded-[3rem] opacity-60 blur-3xl"
-        style={{ background: BRAND_GRADIENT }}
-      />
-
-      <div className="relative rounded-[28px] p-[3px] shadow-2xl shadow-[#7c5fb0]/20" style={{ background: BRAND_GRADIENT }}>
-        <div className="rounded-[25px] bg-white/95 p-4 backdrop-blur">
-          <div className="flex items-center justify-between px-1 pb-3">
-            <div className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full bg-destructive/40" />
-              <span className="size-2.5 rounded-full bg-[#f5c451]" />
-              <span className="size-2.5 rounded-full bg-[#56a456]/60" />
-            </div>
-            <span className="flex items-center gap-1.5 text-[11px] font-medium text-foreground/50">
-              <span className="relative flex size-1.5 motion-reduce:hidden">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#56a456] opacity-75" />
-                <span className="relative inline-flex size-1.5 rounded-full bg-[#56a456]" />
-              </span>
-              Live preview
+        className="relative rounded-[22px] p-0.5 shadow-[0_44px_90px_-50px_rgba(51,34,74,.6),0_8px_24px_-16px_rgba(51,34,74,.3)]"
+        style={{
+          background:
+            'linear-gradient(150deg, rgba(224,195,252,.9), rgba(124,95,176,.55) 45%, rgba(142,197,252,.9))',
+        }}
+      >
+        <div
+          className="overflow-hidden rounded-[20px]"
+          style={{ background: 'linear-gradient(180deg,#fbfaf8,#f4f2ee)' }}
+        >
+          <div className="flex items-center gap-3.5 border-b border-[#33224a]/8 bg-white/70 px-[18px] py-3.5">
+            <span className="flex gap-1.5" aria-hidden="true">
+              <span className="size-2.5 rounded-full bg-[#33224a]/16" />
+              <span className="size-2.5 rounded-full bg-[#33224a]/16" />
+              <span className="size-2.5 rounded-full bg-[#33224a]/16" />
             </span>
+            <span className="flex flex-1 justify-center">
+              <span className="rounded-lg bg-[#33224a]/6 px-4 py-1 text-[11px] font-bold text-[#33224a]/50">
+                app.fauxcus.com
+              </span>
+            </span>
+            <span className="hidden w-14 sm:inline" aria-hidden="true" />
           </div>
+          <div
+            role="img"
+            aria-label="Fauxcus dashboard preview: today's Quick start cards for tasks, goals and the calendar, plus an Upcoming list with due-date pills."
+            className="px-5 pt-6 pb-8 sm:px-10 sm:pt-[34px] sm:pb-11"
+          >
+            <div aria-hidden="true">
+              <div className="mb-[22px] flex items-baseline justify-between">
+                <h2 className="font-display m-0 text-2xl font-semibold tracking-[-.035em] text-[#241a33] sm:text-[34px]">
+                  Welcome back, Sam
+                </h2>
+                <span className="hidden text-[13px] text-[#241a33]/45 sm:inline">
+                  Thursday, September 3 · 8:57 AM
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+                <div
+                  className="flex flex-col justify-between gap-3 rounded-[14px] p-[18px] text-[#33224a] sm:h-[186px]"
+                  style={{
+                    background: 'linear-gradient(160deg,#f2e6ff 0%,#e0c3fc 52%,#c9a5ee 100%)',
+                    boxShadow:
+                      'inset 0 1px 0 rgba(255,255,255,.75), inset 0 0 0 1px rgba(255,255,255,.35), inset 0 -18px 34px -22px rgba(0,0,0,.35), 0 16px 30px -20px rgba(124,95,176,.55)',
+                  }}
+                >
+                  <div className="flex items-center justify-between text-[11px] font-bold">
+                    <span>Task</span>
+                    <span className="font-display font-semibold text-[#33224a]/72 tabular-nums">
+                      7 done today
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-2 rounded-[10px] bg-[#33224a]/9 p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex size-[13px] shrink-0 items-center justify-center rounded-[4px] bg-[#33224a] text-[#e0c3fc]">
+                        <Check className="size-[9px]" strokeWidth={4} />
+                      </span>
+                      <span className="text-[11px] font-bold text-[#33224a]/70 line-through">
+                        Draft the outline
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="size-[13px] shrink-0 rounded-[4px] border-[1.5px] border-[#33224a]/45 bg-[#33224a]/10" />
+                      <span className="text-[11px] font-bold">Renew passport</span>
+                    </div>
+                  </div>
+                  <div className="flex items-end justify-between gap-2.5">
+                    <h3 className="font-display m-0 max-w-[110px] text-[17px] font-semibold tracking-[-.025em]">
+                      Start a new task
+                    </h3>
+                    <span className="plum-btn px-3 py-2 text-xs">New task</span>
+                  </div>
+                </div>
+
+                <div
+                  className="flex flex-col justify-between gap-3 rounded-[14px] p-[18px] text-white sm:h-[186px]"
+                  style={{
+                    background: 'linear-gradient(160deg,#9b7dcd 0%,#7c5fb0 52%,#684d99 100%)',
+                    boxShadow:
+                      'inset 0 1px 0 rgba(255,255,255,.75), inset 0 0 0 1px rgba(255,255,255,.35), inset 0 -18px 34px -22px rgba(0,0,0,.35), 0 16px 30px -20px rgba(124,95,176,.6)',
+                  }}
+                >
+                  <div className="flex items-center justify-between text-[11px] font-bold">
+                    <span>Goal</span>
+                    <span className="font-display font-semibold text-white/82 tabular-nums">3 active</span>
+                  </div>
+                  <div className="flex flex-col gap-2 rounded-[10px] bg-black/20 p-3">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[11px] font-bold">Ship v2</span>
+                      <span className="font-display text-sm font-semibold tabular-nums">82%</span>
+                    </div>
+                    <div className="h-[7px] overflow-hidden rounded-full bg-white/25">
+                      <span className="block h-full w-[82%] rounded-full bg-white" />
+                    </div>
+                    <span className="text-[10px] font-bold text-white/80">9 of 11 tasks · ends Sep 30</span>
+                  </div>
+                  <div className="flex items-end justify-between gap-2.5">
+                    <h3 className="font-display m-0 max-w-[110px] text-[17px] font-semibold tracking-[-.025em]">
+                      Start a new goal
+                    </h3>
+                    <span className="light-btn px-3 py-2 text-xs">New goal</span>
+                  </div>
+                </div>
+
+                <div
+                  className="flex flex-col justify-between gap-3 rounded-[14px] p-[18px] text-[#12314b] sm:h-[186px]"
+                  style={{
+                    background: 'linear-gradient(160deg,#bcdfff 0%,#8ec5fc 52%,#72b0ef 100%)',
+                    boxShadow:
+                      'inset 0 1px 0 rgba(255,255,255,.75), inset 0 0 0 1px rgba(255,255,255,.35), inset 0 -18px 34px -22px rgba(0,0,0,.35), 0 16px 30px -20px rgba(142,197,252,.75)',
+                  }}
+                >
+                  <div className="flex items-center justify-between text-[11px] font-bold">
+                    <span>Calendar</span>
+                    <span className="font-display font-semibold text-[#12314b]/75 tabular-nums">September</span>
+                  </div>
+                  <div className="flex flex-col gap-2 rounded-[10px] bg-[#12314b]/9 p-3">
+                    <div className="grid grid-cols-7 gap-1">
+                      {[31, 1, 2, 3, 4, 5, 6].map((d, i) => (
+                        <span
+                          key={i}
+                          className="flex h-5 items-center justify-center rounded-[5px] text-[10px] font-bold"
+                          style={d === 3 ? { background: '#12314b', color: '#8ec5fc' } : { background: 'rgba(18,49,75,.1)' }}
+                        >
+                          {d}
+                        </span>
+                      ))}
+                    </div>
+                    <span className="text-[10px] font-bold text-[#12314b]/75">4 due today · 2 tomorrow</span>
+                  </div>
+                  <div className="flex items-end justify-between gap-2.5">
+                    <h3 className="font-display m-0 max-w-[110px] text-[17px] font-semibold tracking-[-.025em]">
+                      View your calendar
+                    </h3>
+                    <span
+                      className="rounded-[9px] px-3 py-2 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,.42),0_8px_16px_-10px_rgba(18,49,75,.7)]"
+                      style={{ background: 'linear-gradient(180deg,#22496b,#12314b 62%,#0d2740)' }}
+                    >
+                      Open
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-[30px] mb-3.5 flex items-center justify-between">
+                <h3 className="font-display m-0 text-sm font-semibold tracking-[.02em]">Upcoming</h3>
+                <span className="text-xs font-bold text-[#0284c7]">View all tasks →</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3.5 rounded-[13px] bg-white px-[17px] py-3 shadow-[inset_0_0_0_1px_rgba(37,37,37,.1)]">
+                  <span className="size-[17px] shrink-0 rounded-[5px] border-[1.5px] border-[#e2e0da]" />
+                  <div className="flex flex-1 flex-col gap-0.5">
+                    <span className="text-[13px] font-bold">Draft the outline</span>
+                    <span className="text-[11px] text-[#8e8e8e]">Part of Finish the Q3 report</span>
+                  </div>
+                  <span className="rounded-full bg-[#fef2f2] px-2.5 py-[3px] text-[11px] font-bold text-[#b91c1c]">
+                    Due in 03:41:12
+                  </span>
+                </div>
+                <div className="flex items-center gap-3.5 rounded-[13px] bg-white px-[17px] py-3 shadow-[inset_0_0_0_1px_rgba(37,37,37,.1)]">
+                  <span className="size-[17px] shrink-0 rounded-[5px] border-[1.5px] border-[#e2e0da]" />
+                  <div className="flex flex-1 flex-col gap-0.5">
+                    <span className="text-[13px] font-bold">Renew passport</span>
+                  </div>
+                  <span className="rounded-full bg-[#b91c1c] px-2.5 py-[3px] text-[11px] font-bold text-white">
+                    Overdue
+                  </span>
+                </div>
+                <div className="flex items-center gap-3.5 rounded-[13px] bg-white px-[17px] py-3 shadow-[inset_0_0_0_1px_rgba(37,37,37,.1)]">
+                  <span className="flex size-[17px] shrink-0 items-center justify-center rounded-[5px] border-[1.5px] border-[#56a456] bg-[#56a456] text-white">
+                    <Check className="size-[11px]" strokeWidth={3.5} />
+                  </span>
+                  <div className="flex flex-1 flex-col gap-0.5">
+                    <span className="text-[13px] font-bold text-[#b4b2ac] line-through">Send the invoice</span>
+                  </div>
+                  <span className="rounded-full bg-[#56a456]/10 px-2.5 py-[3px] text-[11px] font-bold text-[#3d8a3d]">
+                    Done 8:12 AM
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function FeatureGrid() {
+  const proofSubtasks = ['Pull the numbers', 'Draft the outline', 'Send for review']
+  const deadlineRows = [
+    { name: 'Prepare client demo', pill: 'Due in 03:41:12', bg: '#fef2f2', color: '#b91c1c' },
+    { name: 'Renew passport', pill: 'Overdue', bg: '#b91c1c', color: '#fff' },
+    { name: 'Review the PR', pill: 'Sep 12, 2026', bg: '#fffbeb', color: '#b45309' },
+  ]
+
+  return (
+    <section id="features" className="mx-auto max-w-[1180px] px-6 pt-20 sm:px-10 sm:pt-[112px]">
+      <div className="flex flex-col gap-6 border-b border-[#33224a]/14 pb-7 sm:flex-row sm:items-end sm:justify-between">
+        <h2 className="font-display m-0 max-w-[20ch] text-[36px] leading-[1.02] font-semibold tracking-[-.04em] sm:text-[52px]">
+          Five things it does. Nothing it doesn&apos;t.
+        </h2>
+        <p className="m-0 max-w-[28ch] text-sm leading-[1.6] text-[#241a33]/60">
+          No boards to configure, no workflow to learn. The list keeps itself in order.
+        </p>
+      </div>
+
+      <div className="mt-8 grid grid-cols-1 gap-5 lg:grid-cols-[7fr_5fr]">
+        <div className="glass-card flex flex-col justify-between gap-7 p-8">
           <div className="flex flex-col gap-3">
-            {DEMO_TASKS.map((task, i) => (
-              <DemoTaskCard key={task.id} task={task} checked={demoFrame.checked[i]} />
+            <span className="font-display text-xs font-semibold tracking-[.14em] text-[#7c5fb0]/85">01</span>
+            <h3 className="font-display m-0 max-w-[22ch] text-[29px] font-semibold tracking-[-.03em]">
+              Subtasks that finish the job for you
+            </h3>
+            <p className="m-0 max-w-[40ch] text-sm leading-[1.6] text-[#241a33]/65">
+              Split anything into steps. Tick the last one and the parent marks itself done — no
+              bookkeeping, no forgotten open tickets.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 rounded-[13px] bg-[#33224a]/5 p-[18px] shadow-[inset_0_0_0_1px_rgba(51,34,74,.06)]">
+            <div className="flex items-center gap-2.5 border-b border-[#33224a]/10 pb-2.5">
+              <span className="flex size-4 shrink-0 items-center justify-center rounded-[5px] bg-[#56a456] text-white">
+                <Check className="size-[11px]" strokeWidth={3.5} aria-hidden="true" />
+              </span>
+              <span className="flex-1 text-sm font-bold text-[#b4b2ac] line-through">
+                Finish the Q3 report
+              </span>
+              <span className="rounded-full bg-[#56a456]/12 px-2.5 py-[3px] text-[11px] font-bold text-[#3d8a3d]">
+                closed automatically
+              </span>
+            </div>
+            <div className="flex flex-col gap-2.5 pl-[26px]">
+              {proofSubtasks.map((label) => (
+                <div key={label} className="flex items-center gap-2.5">
+                  <span className="flex size-3.5 shrink-0 items-center justify-center rounded-[4px] bg-[#56a456] text-white">
+                    <Check className="size-[9px]" strokeWidth={4} aria-hidden="true" />
+                  </span>
+                  <span className="text-[13px] text-[#8e8e8e] line-through">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card flex flex-col justify-between gap-7 p-8">
+          <div className="flex flex-col gap-3">
+            <span className="font-display text-xs font-semibold tracking-[.14em] text-[#7c5fb0]/85">02</span>
+            <h3 className="font-display m-0 max-w-[16ch] text-[29px] font-semibold tracking-[-.03em]">
+              The deadline lives on the card
+            </h3>
+            <p className="m-0 text-sm leading-[1.6] text-[#241a33]/65">
+              Counting down, due later, or already late — you can see it without opening
+              anything.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {deadlineRows.map((row) => (
+              <div
+                key={row.name}
+                className="flex items-center justify-between gap-3 rounded-[11px] bg-white/90 px-[14px] py-3 shadow-[inset_0_0_0_1px_rgba(51,34,74,.08)]"
+              >
+                <span className="text-[13px] font-bold">{row.name}</span>
+                <span
+                  className="rounded-full px-2.5 py-[3px] text-[11px] font-bold tabular-nums"
+                  style={{ background: row.bg, color: row.color }}
+                >
+                  {row.pill}
+                </span>
+              </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Floating chips — purely decorative, illustrating the stats/
-          streak feature the same way DEMO_TASKS illustrates the task
-          list itself: fabricated numbers on fabricated demo data, not a
-          claim about any real account. */}
-      <div
-        aria-hidden="true"
-        className="absolute -top-5 -right-4 hidden rotate-3 items-center gap-1.5 rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-foreground shadow-lg ring-1 ring-black/5 sm:flex"
-      >
-        <TrendingUp className="size-3.5 text-[#56a456]" />
-        7-day streak
+      <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <div className="glass-tile flex flex-col gap-3.5 p-[26px]">
+          <span className="font-display text-xs font-semibold tracking-[.14em] text-[#7c5fb0]/85">03</span>
+          <h3 className="font-display m-0 text-[21px] font-semibold tracking-[-.025em]">Find anything fast</h3>
+          <p className="m-0 text-[13px] leading-[1.6] text-[#241a33]/65">
+            Live search across every task and subtask by name — or type a date and jump to
+            what&apos;s due then.
+          </p>
+          <span className="mt-1 inline-flex w-fit items-center gap-2.5 rounded-full bg-white/95 px-3.5 py-2 shadow-[inset_0_0_0_1px_rgba(51,34,74,.1)]">
+            <Search className="size-3.5 text-[#33224a]/45" strokeWidth={2.5} aria-hidden="true" />
+            <span className="text-xs font-bold text-[#241a33]/45">sep 12</span>
+          </span>
+        </div>
+        <div className="glass-tile flex flex-col gap-3.5 p-[26px]">
+          <span className="font-display text-xs font-semibold tracking-[.14em] text-[#7c5fb0]/85">04</span>
+          <h3 className="font-display m-0 text-[21px] font-semibold tracking-[-.025em]">Goals with a real bar</h3>
+          <p className="m-0 text-[13px] leading-[1.6] text-[#241a33]/65">
+            Group tasks under a goal and watch the percentage move as they close. No manual
+            status updates.
+          </p>
+          <div className="mt-1 flex flex-col gap-[7px]">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs font-bold">Ship v2</span>
+              <span className="font-display text-[13px] font-semibold text-[#7c5fb0] tabular-nums">82%</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-[#33224a]/8">
+              <span
+                className="block h-full w-[82%] rounded-full"
+                style={{ background: 'linear-gradient(90deg,#7c5fb0,#e0c3fc)' }}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="glass-tile flex flex-col gap-3.5 p-[26px]">
+          <span className="font-display text-xs font-semibold tracking-[.14em] text-[#7c5fb0]/85">05</span>
+          <h3 className="font-display m-0 text-[21px] font-semibold tracking-[-.025em]">Reminders that arrive</h3>
+          <p className="m-0 text-[13px] leading-[1.6] text-[#241a33]/65">
+            A nudge before a deadline lands, and a gate that makes you deal with overdue work
+            before piling on more.
+          </p>
+          <div className="mt-1 flex items-center gap-2.5 rounded-[11px] bg-white/95 px-[13px] py-[11px] shadow-[inset_0_0_0_1px_rgba(51,34,74,.1)]">
+            <span className="flex size-[22px] shrink-0 items-center justify-center rounded-[7px] bg-[#f5c451]/22 text-[#a3760c]">
+              <Bell className="size-3" strokeWidth={2.5} aria-hidden="true" />
+            </span>
+            <span className="text-xs font-bold text-[#241a33]/70">2 tasks due tomorrow</span>
+          </div>
+        </div>
       </div>
-      <div
-        aria-hidden="true"
-        className="absolute -bottom-5 -left-4 hidden -rotate-2 items-center gap-1.5 rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-foreground shadow-lg ring-1 ring-black/5 sm:flex"
-      >
-        <Check className="size-3.5 text-emerald-600" />
-        Auto-completes
-      </div>
+    </section>
+  )
+}
+
+function FilmstripRow({ label, checked }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      {checked ? (
+        <span className="flex size-[15px] shrink-0 items-center justify-center rounded-[5px] bg-[#56a456] text-white">
+          <Check className="size-[10px]" strokeWidth={4} aria-hidden="true" />
+        </span>
+      ) : (
+        <span className="size-[15px] shrink-0 rounded-[5px] border-[1.5px] border-[#33224a]/30" />
+      )}
+      <span className={cn('text-[13px] font-bold', checked && 'text-[#b4b2ac] line-through')}>{label}</span>
     </div>
   )
 }
 
-export function LandingPage() {
-  const heroDone = useCyclingHighlight()
-  const demoFrame = useDemoAnimation()
-  const navigate = useNavigate()
-  const [heroEmail, setHeroEmail] = useState('')
-  const [checkingEmail, setCheckingEmail] = useState(false)
-  const [heroError, setHeroError] = useState(null)
-
-  async function handleStart(event) {
-    event.preventDefault()
-    setHeroError(null)
-    setCheckingEmail(true)
-
-    try {
-      const { exists } = await checkEmailExists(heroEmail)
-      // Existing account -> straight to login; unrecognized email -> the
-      // real signup flow. Either way the email carries over as router
-      // state, so the next screen doesn't make them retype it.
-      navigate(exists ? '/login' : '/signup', { state: { email: heroEmail } })
-    } catch {
-      setHeroError('Something went wrong. Please try again.')
-    } finally {
-      setCheckingEmail(false)
-    }
-  }
-
+// Static three-frame filmstrip replacing the old page's timer-driven
+// demo loop — the design handoff is explicit that this must stay
+// static ("there isn't a step four"). Each frame is its own literal
+// block rather than data-mapped: frame 3 has a genuinely different
+// shape (a closed parent + one indented subtask, not three flat rows),
+// so forcing a shared shape would buy less than it costs.
+function WatchItWork() {
   return (
-    <div className="min-h-screen overflow-x-hidden bg-background">
+    <section className="mx-auto max-w-[1180px] px-6 pt-20 sm:px-10 sm:pt-[112px]">
+      <div className="flex flex-col gap-4 border-b border-[#33224a]/14 pb-7 sm:flex-row sm:items-end sm:justify-between">
+        <h2 className="font-display m-0 max-w-[18ch] text-[36px] leading-[1.02] font-semibold tracking-[-.04em] sm:text-[52px]">
+          Watch it work
+        </h2>
+        <p className="m-0 max-w-[30ch] text-sm leading-[1.6] text-[#241a33]/60">
+          Three ticks, start to finish. This is the whole interaction — there isn&apos;t a step
+          four.
+        </p>
+      </div>
+
+      <div className="mt-8 grid grid-cols-1 gap-[22px] sm:grid-cols-3">
+        <div className="flex flex-col gap-4">
+          <div className="filmstrip-frame flex flex-col gap-2.5 p-5">
+            <FilmstripRow label="Pull the numbers" checked={false} />
+            <FilmstripRow label="Draft the outline" checked={false} />
+            <FilmstripRow label="Send for review" checked={false} />
+          </div>
+          <div className="flex items-baseline gap-3">
+            <span className="font-display text-xs font-semibold tracking-[.14em] text-[#7c5fb0]/85">01</span>
+            <p className="m-0 text-sm leading-[1.55] text-[#241a33]/70">
+              <strong className="text-[#241a33]">Three subtasks, one parent.</strong> Added in one
+              line each, no fields to fill.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <div className="filmstrip-frame flex flex-col gap-2.5 p-5">
+            <FilmstripRow label="Pull the numbers" checked />
+            <FilmstripRow label="Draft the outline" checked />
+            <FilmstripRow label="Send for review" checked={false} />
+          </div>
+          <div className="flex items-baseline gap-3">
+            <span className="font-display text-xs font-semibold tracking-[.14em] text-[#7c5fb0]/85">02</span>
+            <p className="m-0 text-sm leading-[1.55] text-[#241a33]/70">
+              <strong className="text-[#241a33]">Two down.</strong> The parent&apos;s progress
+              moves on its own — nothing to update.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <div className="filmstrip-frame-emphasized flex flex-col gap-2.5 p-5">
+            <div className="flex items-center justify-between gap-2.5 border-b border-[#33224a]/10 pb-2.5">
+              <span className="flex items-center gap-2.5">
+                <span className="flex size-[15px] shrink-0 items-center justify-center rounded-[5px] bg-[#56a456] text-white">
+                  <Check className="size-[10px]" strokeWidth={4} aria-hidden="true" />
+                </span>
+                <span className="text-[13px] font-bold text-[#b4b2ac] line-through">
+                  Finish the Q3 report
+                </span>
+              </span>
+              <span className="rounded-full bg-[#56a456]/12 px-2 py-[3px] text-[10px] font-bold text-[#3d8a3d]">
+                done
+              </span>
+            </div>
+            <div className="flex items-center gap-2.5 pl-[25px]">
+              <span className="flex size-3.5 shrink-0 items-center justify-center rounded-[4px] bg-[#56a456] text-white">
+                <Check className="size-[9px]" strokeWidth={4} aria-hidden="true" />
+              </span>
+              <span className="text-xs text-[#8e8e8e] line-through">Send for review</span>
+            </div>
+          </div>
+          <div className="flex items-baseline gap-3">
+            <span className="font-display text-xs font-semibold tracking-[.14em] text-[#7c5fb0]/85">03</span>
+            <p className="m-0 text-sm leading-[1.55] text-[#241a33]/70">
+              <strong className="text-[#241a33]">Last tick closes the parent.</strong> The task
+              leaves your list without you touching it.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function HowItWorks() {
+  return (
+    <section id="how" className="mx-auto max-w-[1180px] px-6 pt-20 sm:px-10 sm:pt-[112px]">
+      <h2 className="font-display m-0 max-w-[20ch] text-[36px] leading-[1.02] font-semibold tracking-[-.04em] sm:text-[52px]">
+        Set up in about a minute
+      </h2>
+      <div className="mt-11 grid grid-cols-1 border-t border-[#33224a]/16 sm:grid-cols-3">
+        {HOW_STEPS.map((step, i) => (
+          <div
+            key={step.title}
+            className={cn(
+              'flex flex-col gap-3.5 py-[30px]',
+              i < HOW_STEPS.length - 1 && 'sm:border-r sm:border-[#33224a]/12',
+              i === 0 ? 'sm:pr-[34px] sm:pl-0' : i === HOW_STEPS.length - 1 ? 'sm:pr-0 sm:pl-[34px]' : 'sm:px-[34px]'
+            )}
+          >
+            <span className="font-display text-[44px] leading-none font-semibold tracking-[-.05em] text-[#33224a]/16 sm:text-[60px]">
+              {String(i + 1).padStart(2, '0')}
+            </span>
+            <h3 className="font-display m-0 text-[22px] font-semibold tracking-[-.025em]">{step.title}</h3>
+            <p className="m-0 text-sm leading-[1.6] text-[#241a33]/65">{step.body}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+// All-invented sample data, same set the design handoff specifies —
+// there's no signed-in visitor here to derive real numbers from, and
+// the handoff explicitly allows the illustrative sample as long as
+// it's clearly marked as one (see the "Example account" tag) rather
+// than presented as the visitor's own.
+function StatsBand() {
+  return (
+    <section className="mt-20 text-white sm:mt-[112px]" style={{ background: 'linear-gradient(170deg,#3b2856,#33224a 55%,#271a3a)' }}>
+      <div className="mx-auto grid max-w-[1180px] grid-cols-1 items-center gap-14 px-6 py-16 sm:px-10 lg:grid-cols-2 lg:gap-[72px] lg:py-24">
+        <div className="flex flex-col gap-[22px]">
+          <span className="text-[11px] font-bold tracking-[.18em] text-white/50 uppercase">Progress</span>
+          <h2 className="font-display m-0 max-w-[18ch] text-[32px] leading-[1.02] font-semibold tracking-[-.04em] sm:text-[52px]">
+            Your habits, measured without being asked about
+          </h2>
+          <p className="m-0 max-w-[38ch] text-base leading-[1.6] text-white/68">
+            Completion rate, current streak and the hours you actually get things done — all
+            derived from the ticking you&apos;re already doing. No timers, no check-ins, no
+            weekly survey.
+          </p>
+          <Link
+            to="/signup"
+            className="light-btn mt-1.5 w-fit px-5 py-[13px] text-sm focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:outline-none"
+          >
+            See your numbers
+            <ArrowRight className="size-3.5" strokeWidth={3} aria-hidden="true" />
+          </Link>
+        </div>
+
+        <div aria-hidden="true" className="flex flex-col gap-2">
+          <span className="self-end text-[10px] font-bold tracking-[.1em] text-white/35 uppercase">
+            Example account
+          </span>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-4 rounded-2xl bg-white/9 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,.28),inset_0_0_0_1px_rgba(255,255,255,.12)] backdrop-blur-[10px] sm:col-span-2 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-bold text-white/60">Completion rate · 30 days</span>
+                <span className="font-display text-[44px] leading-none font-semibold tracking-[-.04em] tabular-nums sm:text-[52px]">
+                  68%
+                </span>
+                <span className="text-xs text-white/55">124 of 182 tasks closed on time</span>
+              </div>
+              <div className="flex h-[88px] items-end gap-1.5">
+                {[38, 56, 44, 72, 64, 88, 100].map((h, i) => (
+                  <span
+                    key={i}
+                    className="w-[13px] rounded"
+                    style={{
+                      height: `${h}%`,
+                      background: i === 6 ? '#fff' : i === 5 ? '#e0c3fc' : `rgba(224,195,252,${0.5 + i * 0.05})`,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 rounded-2xl bg-white/9 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,.28),inset_0_0_0_1px_rgba(255,255,255,.12)] backdrop-blur-[10px]">
+              <span className="text-xs font-bold text-white/60">Current streak</span>
+              <span className="font-display text-[38px] leading-none font-semibold tracking-[-.04em] tabular-nums">
+                7 days
+              </span>
+              <div className="flex gap-[5px]">
+                {Array.from({ length: 7 }).map((_, i) => (
+                  <span key={i} className="size-3.5 rounded-[5px] bg-[#56a456]" />
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 rounded-2xl bg-white/9 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,.28),inset_0_0_0_1px_rgba(255,255,255,.12)] backdrop-blur-[10px]">
+              <span className="text-xs font-bold text-white/60">Most productive</span>
+              <span className="font-display text-[38px] leading-none font-semibold tracking-[-.04em] tabular-nums">
+                9–11am
+              </span>
+              <span className="text-xs text-white/55">41% of everything you close</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ClosingCTA() {
+  return (
+    <section className="mx-auto max-w-[1180px] px-6 pt-20 sm:px-10 sm:pt-[112px]">
+      <div
+        className="relative overflow-hidden rounded-[24px] p-8 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.22),0_34px_70px_-40px_rgba(51,34,74,.8)] sm:p-16"
+        style={{ background: 'linear-gradient(150deg,#3b2856,#33224a 52%,#271a3a)' }}
+      >
+        <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[1.15fr_.85fr] lg:gap-[60px]">
+          <div className="flex flex-col gap-[18px]">
+            <h2 className="font-display m-0 max-w-[16ch] text-[36px] leading-[1.02] font-semibold tracking-[-.045em] sm:text-[56px]">
+              Start closing things out.
+            </h2>
+            <p className="m-0 max-w-[36ch] text-base leading-[1.6] text-white/68">
+              Free while you try it, no card, and your first task takes about eight seconds.
+            </p>
+          </div>
+          <div className="flex flex-col gap-[14px]">
+            <EmailCaptureForm variant="dark" idPrefix="cta" />
+            <span className="text-xs text-white/50">
+              Already have an account?{' '}
+              <Link
+                to="/login"
+                className="rounded font-bold text-[#e0c3fc] hover:underline focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:outline-none"
+              >
+                Log in
+              </Link>
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// No `overflow-x-hidden` on the root wrapper below (unlike the old
+// page) — this design has no negative-offset decorative blobs
+// bleeding past the viewport edge that would need it, and
+// `overflow-x` on any ancestor of a `position: sticky` element
+// quietly breaks the stickiness (it forces `overflow-y: auto` per
+// spec, which makes this div itself the sticky containing block
+// instead of the viewport) — confirmed live: the header scrolled
+// away with the page until this was removed.
+export function LandingPage() {
+  return (
+    <div className="min-h-screen bg-[#f0eee9] text-[#241a33]">
       {/* Visually hidden until focused — the one keyboard-only path past
           the sticky header straight to the hero, skipping the nav. */}
       <a
@@ -301,211 +811,21 @@ export function LandingPage() {
         Skip to content
       </a>
 
-      {/* ---- header ---- */}
-      <header className="sticky top-0 z-50 border-b border-black/5 bg-white/70 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          {/* This page only ever renders when logged out (App.jsx
-              redirects an authenticated visitor away from / entirely),
-              so linking to / here is a same-page no-op — kept anyway
-              for consistency with every other Logo instance in the app,
-              all of which are real links. */}
-          <Link to="/" aria-label="Fauxcus home">
-            <Logo scale="secondary" />
-          </Link>
-          <nav className="flex items-center gap-3">
-            <Link
-              to="/login"
-              className="rounded-full px-3 py-1.5 text-sm font-medium text-foreground/80 transition-colors hover:bg-black/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-[#56a456]/50 focus-visible:outline-none"
-            >
-              Log in
-            </Link>
-            <Button
-              size="sm"
-              render={<Link to="/signup" />}
-              className="rounded-full bg-[#56a456] px-4 shadow-md shadow-[#56a456]/25 hover:bg-[#56a456]/90"
-              nativeButton={false}
-            >
-              Sign up
-            </Button>
-          </nav>
-        </div>
-      </header>
+      <Header />
 
       <main id="main-content">
-      {/* ---- hero ---- */}
-      <section className="relative overflow-hidden px-6 pt-16 pb-20 sm:pt-20 lg:pb-28">
-        {/* Soft brand-gradient blobs behind the hero content — the same
-            three stops as everywhere else, just spread out and blurred
-            into ambient color instead of a hard-edged tile. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-32 -left-24 -z-10 size-96 rounded-full opacity-40 blur-3xl"
-          style={{ background: '#e0c3fc' }}
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-40 right-0 -z-10 size-[28rem] rounded-full opacity-30 blur-3xl"
-          style={{ background: '#8ec5fc' }}
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute top-40 left-1/3 -z-10 size-72 rounded-full opacity-20 blur-3xl"
-          style={{ background: '#7c5fb0' }}
-        />
-
-        <div className="mx-auto grid max-w-6xl items-center gap-16 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="flex flex-col items-center gap-6 text-center lg:items-start lg:text-left">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-foreground/15 bg-white/60 px-3 py-1 text-xs font-medium text-foreground/80 backdrop-blur-sm">
-              <span aria-hidden="true" className="size-1.5 rounded-full" style={{ background: BRAND_GRADIENT }} />
-              Lightweight task tracking
-            </span>
-
-            <h1 className="text-4xl leading-[1.08] font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-              Where <HeroWordChip done={heroDone}>doers</HeroWordChip> get it{' '}
-              <HeroWordChip done={heroDone}>done</HeroWordChip>.
-            </h1>
-
-            <p className="max-w-xl text-lg text-foreground/70">
-              Fauxcus tracks tasks, subtasks, and deadlines in one place — so nothing
-              slips through.
-            </p>
-
-            <form onSubmit={handleStart} className="relative w-full max-w-md rounded-full">
-              <label htmlFor="hero-email" className="sr-only">
-                Email address
-              </label>
-              <span aria-hidden="true" className="gradient-ring" />
-              <div className="relative flex overflow-hidden rounded-full bg-white shadow-sm focus-within:ring-2 focus-within:ring-[#56a456]/50">
-                <input
-                  id="hero-email"
-                  type="email"
-                  name="email"
-                  autoComplete="email"
-                  spellCheck={false}
-                  value={heroEmail}
-                  onChange={(e) => setHeroEmail(e.target.value)}
-                  placeholder="fake@example.com"
-                  required
-                  className="min-w-0 flex-1 bg-transparent py-3 pr-2 pl-5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
-                />
-                <Button
-                  type="submit"
-                  disabled={checkingEmail}
-                  className="m-1 h-auto shrink-0 rounded-full bg-[#56a456] px-5 hover:bg-[#56a456]/90"
-                >
-                  {checkingEmail ? 'Checking…' : (
-                    <span className="inline-flex items-center gap-1.5">
-                      Get started free
-                      <ArrowRight className="size-3.5" aria-hidden="true" />
-                    </span>
-                  )}
-                </Button>
-              </div>
-            </form>
-
-            {heroError && (
-              <p role="alert" aria-live="polite" className="text-sm text-destructive">
-                {heroError}
-              </p>
-            )}
-
-            <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-foreground/60 lg:justify-start">
-              {TRUST_ITEMS.map((item) => (
-                <li key={item} className="flex items-center gap-1.5">
-                  <Check className="size-3.5 text-[#56a456]" aria-hidden="true" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <ProductMockup demoFrame={demoFrame} />
-        </div>
-      </section>
-
-      {/* ---- feature highlights ---- */}
-      <section className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
-        <div className="mx-auto mb-12 max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-            Everything a task list needs, nothing it doesn&apos;t
-          </h2>
-          <p className="mt-3 text-foreground/70">
-            No boards to configure, no workflow to learn — just tasks that stay
-            organized on their own.
-          </p>
-        </div>
-
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((feature) => (
-            <Card
-              key={feature.title}
-              className={cn(
-                'group relative overflow-hidden shadow-sm transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-[0_16px_40px_-16px_var(--feature-shadow)]',
-                feature.featured ? 'p-8 sm:col-span-2' : 'p-6'
-              )}
-              style={{ '--feature-shadow': `${feature.accent}40` }}
-            >
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute -top-10 -right-10 size-32 rounded-full opacity-20 blur-2xl transition-opacity duration-200 group-hover:opacity-35"
-                style={{ backgroundColor: feature.accent }}
-              />
-              <div className="relative flex flex-col gap-3">
-                <div
-                  className={cn(
-                    'flex items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110',
-                    feature.featured ? 'size-14' : 'size-11'
-                  )}
-                  style={{ backgroundColor: `${feature.accent}1a`, color: feature.accent }}
-                >
-                  <feature.icon className={feature.featured ? 'size-7' : 'size-5'} aria-hidden="true" />
-                </div>
-                <h3 className={cn('font-semibold', feature.featured && 'text-lg')}>{feature.title}</h3>
-                <p className={cn('text-foreground/70', feature.featured ? 'max-w-md text-sm sm:text-base' : 'text-sm')}>
-                  {feature.description}
-                </p>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      {/* ---- closing CTA — a gradient-ringed card on the page's own
-          light background (not a second dark band) so Footer's own
-          diagonal-clipped starfield top edge, right below, still reads
-          as the one deliberate light-to-dark transition on the page
-          instead of competing with an earlier one. */}
-      <section className="px-6 pt-4 pb-20">
-        <div className="relative mx-auto max-w-3xl rounded-[28px] p-[3px]" style={{ background: BRAND_GRADIENT }}>
-          <div className="rounded-[25px] bg-white px-8 py-14 text-center sm:px-16">
-            <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-              Ready to get organized?
-            </h2>
-            <p className="mx-auto mt-3 max-w-md text-sm text-foreground/70">
-              Join Fauxcus and keep every task, deadline, and subtask in one place.
-            </p>
-            <div className="mt-8 flex justify-center">
-              <Button
-                size="lg"
-                render={<Link to="/signup" />}
-                nativeButton={false}
-                className="rounded-full bg-[#56a456] px-6 shadow-lg shadow-[#56a456]/30 hover:bg-[#56a456]/90"
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  Sign up free
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
+        <Hero />
+        <ProductShot />
+        <FeatureGrid />
+        <WatchItWork />
+        <HowItWorks />
+        <StatsBand />
+        <ClosingCTA />
       </main>
 
-      {/* ---- footer — the same component every authenticated page
-          uses, not a bespoke landing-page one, so the mark, link
-          columns, and starfield ground are identical wherever they
-          appear in the app. ---- */}
+      {/* The same component every authenticated page uses, not a
+          bespoke landing-page one, so the mark, link columns, and
+          starfield ground are identical wherever they appear. */}
       <Footer />
     </div>
   )

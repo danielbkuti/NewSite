@@ -217,7 +217,7 @@ function TaskPreviewRow({ label, stage, delayS = 0, hovered, reducedMotion }) {
 // renderer. `taskId` is always the *task's* id (itself, for a task row;
 // its parent's, for a subtask row) since only tasks have their own
 // detail page — same convention as OverdueGateModal's item list.
-function UpcomingRow({ item, celebrating, onToggle, first }) {
+function UpcomingRow({ item, celebrating, onToggle }) {
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
   // `item.completed` already folds in the celebration flag (see the
@@ -242,14 +242,15 @@ function UpcomingRow({ item, celebrating, onToggle, first }) {
     // of a class not actually winning the merge. Clicking the row opens
     // the underlying task's detail page — same "whole row navigates,
     // interactive controls opt out with stopPropagation" convention as
-    // TaskCard; the checkbox is the only control here. `first` carries
-    // the design's "current focus" gradient ring treatment — decorative,
-    // just the soonest-due row rather than a fixed first index.
+    // TaskCard; the checkbox is the only control here. Every row gets the
+    // gradient ring (matches the rest of the app's card treatment) — the
+    // design handoff's "first row only" version read as inconsistent in
+    // practice, so all rows keep it rather than singling one out.
     <div
       onClick={() => navigate(`/tasks/${item.taskId}`)}
       className="relative flex cursor-pointer items-center gap-[14px] rounded-[14px] bg-card px-[18px] py-[14px] text-sm ring-1 ring-foreground/10 transition-colors hover:bg-accent/50"
     >
-      {first && <span aria-hidden="true" className="task-ring" />}
+      <span aria-hidden="true" className="task-ring" />
       <Checkbox
         checked={item.completed}
         onCheckedChange={handleToggle}
@@ -683,13 +684,12 @@ export function Dashboard({ firstName, username, justLoggedIn, onWelcomeSeen }) 
 
           {status === 'ready' && upcoming.length > 0 && (
             <div className="flex flex-col gap-2.5">
-              {upcoming.map((item, i) => (
+              {upcoming.map((item) => (
                 <UpcomingRow
                   key={`${item.kind}-${item.id}`}
                   item={item}
                   celebrating={isCelebrating(item.kind, item.id)}
                   onToggle={handleToggle}
-                  first={i === 0}
                 />
               ))}
             </div>
